@@ -105,12 +105,12 @@ window.Utils = (function () {
     return '';
   }
 
-  /** 模糊匹配：姓名/拼音/拼音首字母/电话 任一包含 query */
+  /** 模糊匹配：姓名/拼音/拼音首字母/电话(长号或短号) 任一包含 query */
   function matchPerson(query, person) {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return true;
     const name = (person.name || '').toLowerCase();
-    const phone = (person.phone || '').toLowerCase();
+    const phone = ((person.phone || '') + ' ' + (person.shortPhone || '')).toLowerCase();
     if (name.includes(q)) return true;
     if (phone.includes(q)) return true;
     if (name.includes(q.replace(/\s+/g, ''))) return true;
@@ -124,6 +124,22 @@ window.Utils = (function () {
   /* ---------- 随机/ID ---------- */
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  /** 人员电话号码显示：长号/短号（如 15805805019/615019） */
+  function phoneText(person) {
+    if (!person) return '';
+    const long = (person.phone || '').trim();
+    const short = (person.shortPhone || '').trim();
+    if (long && short) return `${long}/${short}`;
+    return long || short;
+  }
+
+  /** 人员完整显示文本：姓名 + 电话（如 牛涛 13758031896/632896） */
+  function personText(person) {
+    if (!person) return '';
+    const p = phoneText(person);
+    return p ? `${person.name} ${p}` : (person.name || '');
   }
 
   /* ---------- 简单密码散列（前端演示用，非安全哈希） ---------- */
@@ -162,5 +178,6 @@ window.Utils = (function () {
     yearCN, monthCN, numCN, pad2, daysInMonth,
     isWeekend, isHoliday, isMakeupWorkday, isAllDay, dayTag, holidayNames,
     fmtDate, fmtDateCN, matchPerson, uid, hashPassword, downloadBlob, readFileAsArrayBuffer,
+    phoneText, personText,
   };
 })();
