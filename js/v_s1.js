@@ -45,6 +45,8 @@ window.VS1 = (function () {
       signers: { maker: s1.maker, reviewer: s1.reviewer, approver: s1.approver },
       candidatePersons: candidates,
       groupByTeam: false,
+      userId: (App.currentUser() && App.currentUser().id),
+      departmentName: '',
       titleSuffix: '干部值班表',
       personHeader: '值班人及其手机号',
       signerFields: [
@@ -52,6 +54,8 @@ window.VS1 = (function () {
         { key: 'reviewer', label: '审核：', defaultValue: CONFIG.SCHEDULE1_DEFAULTS.reviewer },
         { key: 'approver', label: '批准：', defaultValue: CONFIG.SCHEDULE1_DEFAULTS.approver },
       ],
+      getSubmit: () => Store.getSubmit('s1'),
+      onSubmit: () => Store.setSubmit('s1', null, true),
       onSave(patch) {
         if (patch.assignments) s1.assignments = patch.assignments;
         if (patch.tags) s1.tags = patch.tags;
