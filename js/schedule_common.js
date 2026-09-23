@@ -6,10 +6,10 @@ window.Schedule = (function () {
   /** 拖拽中的 payload */
   let _dragPayload = null;
 
-  /** 渲染左侧候选人面板（可搜索、可拖拽、可按班组分组）
+  /** 渲染左侧候选人面板（可搜索、可拖拽、可按组织关系筛选/分组）
    * @param container DOM
    * @param {array} persons 候选人员（可含 team 字段）
-   * @param {object} opts { groupByTeam:boolean }
+   * @param {object} opts { groupByTeam:boolean, teams:array（可选的组织关系筛选列表） }
    * @param {function} onPick(p) 点击选中回调
    */
   function renderPersonPanel(container, persons, opts, onPick) {
@@ -17,6 +17,15 @@ window.Schedule = (function () {
     container.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.className = 'pp-panel';
+
+    // 组织关系筛选（先筛班组，减少显示）
+    let teamFilter = 'all';
+    const teamOptions = opts.teams || Array.from(new Set(persons.map(p => p.team).filter(Boolean)));
+    const teamSel = document.createElement('select');
+    teamSel.className = 'pp-team';
+    teamSel.innerHTML = `<option value="all">全部组织（${persons.length}人）</option>` +
+      teamOptions.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    wrap.appendChild(teamSel);
 
     // 搜索框
     const search = document.createElement('input');
@@ -32,9 +41,10 @@ window.Schedule = (function () {
     function refresh() {
       const q = search.value;
       list.innerHTML = '';
-      const filtered = persons.filter(p => Utils.matchPerson(q, p));
+      let filtered = persons.filter(p => Utils.matchPerson(q, p));
+      if (teamFilter !== 'all') filtered = filtered.filter(p => (p.team || '') === teamFilter);
 
-      if (opts.groupByTeam) {
+      if (opts.groupByTeam && teamFilter === 'all') {
         // 按班组分组
         const groups = {};
         filtered.forEach(p => {
@@ -59,11 +69,14 @@ window.Schedule = (function () {
       }
     }
 
+    teamSel.addEventListener('change', () => { teamFilter = teamSel.value; refresh(); });
     search.addEventListener('input', refresh);
     refresh();
     container.appendChild(wrap);
     return { refresh, setQuery: (q) => { search.value = q; refresh(); } };
   }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function makeItem(p, onPick) {
     const item = document.createElement('div');
@@ -257,9 +270,157 @@ window.Schedule = (function () {
     return overlay;
   }
 
+  /* ---------- 组合/捆绑（有序多人一起拖入） ---------- */
+  function makeBundleItem(persons, label, sub, onPick) {
+    const item = document.createElement('div');
+    item.className = 'pp-item bundle-item';
+    item.draggable = true;
+    const nameEl = document.createElement('div');
+    nameEl.className = 'pp-name';
+    nameEl.textContent = label;
+    const descEl = document.createElement('div');
+    descEl.className = 'pp-phone';
+    descEl.textContent = sub || persons.map(p => p.name).join(' → ');
+    item.appendChild(nameEl);
+    item.appendChild(descEl);
+    const payload = { bundle: true, persons: persons };
+    item.addEventListener('dragstart', (e) => {
+      _dragPayload = payload;
+      e.dataTransfer.effectAllowed = 'copy';
+      try { e.dataTransfer.setData('text/plain', JSON.stringify(payload)); } catch (err) {}
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', () => item.classList.remove('dragging'));
+    item.addEventListener('click', () => { if (onPick) onPick(persons); });
+    return item;
+  }
+
+  /**
+   * 右侧功能栏：组合拖入（智能建议 + 我的组合 + 新建）
+   * @param container DOM
+   * @param {object} cfg { userId, departmentName, onBundleDrop(persons), onManage() }
+   */
+  function bundlePanel(container, cfg) {
+    container.innerHTML = '';
+    const panel = document.createElement('div');
+    panel.className = 'bundle-panel';
+
+    const title = document.createElement('div');
+    title.className = 'bundle-title';
+    title.textContent = '组合拖入';
+    panel.appendChild(title);
+
+    // 智能建议（相邻共现记忆）
+    const sugHead = document.createElement('div');
+    sugHead.className = 'bundle-sub';
+    sugHead.textContent = '📌 智能建议（相邻常配）';
+    panel.appendChild(sugHead);
+    const suggestions = Store.suggestBundles(cfg.userId, cfg.departmentName, 5);
+    if (suggestions.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'bundle-hint';
+      hint.textContent = '暂无建议。完成排班保存后，系统会学习相邻值班人员，自动给出组合建议。';
+      panel.appendChild(hint);
+    }
+    const allPeople = Store.listPersonnel();
+    suggestions.forEach(s => {
+      const persons = s.personIds.map(id => allPeople.find(p => p.id === id)).filter(Boolean);
+      panel.appendChild(makeBundleItem(persons, s.name, `相邻搭配 ×${s.count}`, cfg.onBundleDrop));
+    });
+
+    // 我的组合
+    const myHead = document.createElement('div');
+    myHead.className = 'bundle-sub';
+    myHead.textContent = '🧩 我的组合';
+    panel.appendChild(myHead);
+    const bundles = Store.listBundles(cfg.userId);
+    if (bundles.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'bundle-hint';
+      hint.textContent = '还没有组合，点击下方「新建组合」。';
+      panel.appendChild(hint);
+    }
+    bundles.forEach(b => {
+      const persons = b.personIds.map(id => allPeople.find(p => p.id === id)).filter(Boolean);
+      panel.appendChild(makeBundleItem(persons, b.name, persons.map(p => p.name).join(' → '), cfg.onBundleDrop));
+    });
+
+    // 新建组合按钮
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-block';
+    btn.textContent = '＋ 新建组合';
+    btn.addEventListener('click', () => cfg.onManage());
+    panel.appendChild(btn);
+
+    container.appendChild(panel);
+    return panel;
+  }
+
+  /** 组合编辑弹窗（新建/编辑有序组合） */
+  function bundleEditor(userId, departmentName, onChanged) {
+    const allPeople = Store.listPersonnel().filter(p => p.department === departmentName);
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="width:640px">
+      <div class="modal-title">新建组合（按顺序拖入，可多人）</div>
+      <div class="gm-new"><input id="be-name" class="inp" placeholder="组合名称，如：1号-2号-3号"></div>
+      <input id="be-search" class="inp" placeholder="搜索 姓名/拼音/电话…" style="width:100%;margin-bottom:6px">
+      <div class="be-body"></div>
+      <div class="modal-actions">
+        <button id="be-cancel" class="btn">取消</button>
+        <button id="be-save" class="btn btn-primary">保存组合</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+
+    let selected = []; // 有序 person id 列表
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function renderSelected() {
+      const box = overlay.querySelector('.be-selected');
+      if (!box) return;
+      box.innerHTML = selected.map((id, i) => {
+        const p = allPeople.find(x => x.id === id);
+        return `<span class="be-chip">${i + 1}.${esc(p ? p.name : '')}<b data-rm="${id}">×</b></span>`;
+      }).join('');
+      box.querySelectorAll('b[data-rm]').forEach(b => b.addEventListener('click', () => {
+        selected = selected.filter(id => id !== b.getAttribute('data-rm'));
+        renderSelected();
+      }));
+    }
+    // 选中栏
+    const selDiv = document.createElement('div');
+    selDiv.className = 'be-selected';
+    overlay.querySelector('.be-body').appendChild(selDiv);
+    // 人员列表
+    const listDiv = document.createElement('div');
+    listDiv.className = 'be-list';
+    overlay.querySelector('.be-body').appendChild(listDiv);
+    function renderList(q) {
+      listDiv.innerHTML = '';
+      allPeople.filter(p => Utils.matchPerson(q, p)).slice(0, 200).forEach(p => {
+        const it = document.createElement('div');
+        it.className = 'pp-item';
+        it.innerHTML = `<div class="pp-name">${esc(p.name)}</div><div class="pp-phone">${esc(Utils.phoneText(p))}</div>${p.team ? `<span class="pp-tag">${esc(p.team)}</span>` : ''}`;
+        it.addEventListener('click', () => { if (!selected.includes(p.id)) { selected.push(p.id); renderSelected(); } });
+        listDiv.appendChild(it);
+      });
+    }
+    renderList('');
+    overlay.querySelector('#be-search').addEventListener('input', (e) => renderList(e.target.value));
+    overlay.querySelector('#be-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#be-save').addEventListener('click', () => {
+      const name = overlay.querySelector('#be-name').value.trim() || ('组合' + (Store.listBundles(userId).length + 1));
+      if (selected.length < 2) { alert('请至少选择 2 人组成组合'); return; }
+      Store.addBundle(userId, name, selected);
+      overlay.remove();
+      if (onChanged) onChanged();
+    });
+    return overlay;
+  }
+
   return {
     renderPersonPanel, makeDroppable, readClipboard, writeClipboard,
     getDragPayload: () => _dragPayload,
-    groupManager,
+    groupManager, bundlePanel, bundleEditor, makeBundleItem,
   };
 })();
