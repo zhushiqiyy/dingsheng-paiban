@@ -24,7 +24,7 @@ window.VPersonnel = (function () {
         <table class="grid-table" id="p-table">
           <thead><tr>
             <th><input type="checkbox" id="p-checkall"></th>
-            <th>姓名</th><th>联系电话</th><th>班组</th><th>部门</th><th>操作</th>
+            <th>姓名</th><th>长号(工作号码)</th><th>短号(集团短号)</th><th>班组(二级部门)</th><th>部门(一级部门)</th><th>操作</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -48,6 +48,7 @@ window.VPersonnel = (function () {
           <td><input type="checkbox" class="p-check" data-id="${p.id}"></td>
           <td class="editable" data-field="name">${esc(p.name)}</td>
           <td class="editable" data-field="phone">${esc(p.phone)}</td>
+          <td class="editable" data-field="shortPhone">${esc(p.shortPhone)}</td>
           <td class="editable" data-field="team">${esc(p.team)}</td>
           <td class="editable" data-field="department">${esc(p.department)}</td>
           <td><button class="btn btn-sm btn-danger" data-del="${p.id}">删除</button></td>
@@ -140,9 +141,10 @@ window.VPersonnel = (function () {
     const overlay = modal(`
       <div class="modal-title">${p ? '编辑人员' : '新增人员'}</div>
       <div class="field"><label>姓名 *</label><input id="pe-name" value="${__esc(p ? p.name : '')}"></div>
-      <div class="field"><label>联系电话 *</label><input id="pe-phone" value="${__esc(p ? p.phone : '')}"></div>
-      <div class="field"><label>班组</label><input id="pe-team" value="${__esc(p ? p.team : '')}"></div>
-      <div class="field"><label>部门</label><select id="pe-dept">${deptSel}</select></div>
+      <div class="field"><label>长号（工作号码）*</label><input id="pe-phone" value="${__esc(p ? p.phone : '')}"></div>
+      <div class="field"><label>短号（集团短号）</label><input id="pe-short" value="${__esc(p ? p.shortPhone : '')}"></div>
+      <div class="field"><label>班组（二级部门）</label><input id="pe-team" value="${__esc(p ? p.team : '')}"></div>
+      <div class="field"><label>部门（一级部门）</label><select id="pe-dept">${deptSel}</select></div>
       <div class="modal-actions">
         <button id="pe-cancel" class="btn">取消</button>
         <button id="pe-save" class="btn btn-primary">保存</button>
@@ -153,8 +155,13 @@ window.VPersonnel = (function () {
     get('#pe-save').addEventListener('click', () => {
       const name = get('#pe-name').value.trim();
       const phone = get('#pe-phone').value.trim();
-      if (!name || !phone) { alert('姓名和电话为必填项'); return; }
-      const data = { name, phone, team: get('#pe-team').value.trim(), department: get('#pe-dept').value };
+      if (!name || !phone) { alert('姓名和长号为必填项'); return; }
+      const data = {
+        name, phone,
+        shortPhone: get('#pe-short').value.trim(),
+        team: get('#pe-team').value.trim(),
+        department: get('#pe-dept').value,
+      };
       if (id) Store.updatePerson(id, data); else Store.addPerson(data);
       overlay.remove();
       refresh();
@@ -193,13 +200,14 @@ window.VPersonnel = (function () {
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      // 识别表头列：姓名/名字/name，电话/手机号/phone，班组，部门
+      // 识别表头列（兼容通讯录「工作号码/集团短号/一级部门/二级部门」及通用「电话/手机号/班组/部门」）
       const header = rows[0] || [];
       const idx = {
         name: findCol(header, ['姓名', '名字', 'name', '人员', 'Name']),
-        phone: findCol(header, ['电话', '联系电话', '手机号', '手机', 'phone', 'tel']),
-        team: findCol(header, ['班组', 'team', '组']),
-        department: findCol(header, ['部门', 'department', 'dept', '所属部门']),
+        phone: findCol(header, ['工作号码', '电话', '联系电话', '手机号', '手机', '长号', 'phone', 'tel']),
+        shortPhone: findCol(header, ['集团短号', '短号', '虚拟网', '虚拟号', 'shortphone']),
+        team: findCol(header, ['二级部门', '班组', 'team', '组']),
+        department: findCol(header, ['一级部门', '部门', '所属部门', '项目部', 'department', 'dept']),
       };
       const people = [];
       for (let i = 1; i < rows.length; i++) {
@@ -207,22 +215,30 @@ window.VPersonnel = (function () {
         if (!r || r.length === 0) continue;
         const name = (idx.name >= 0 ? r[idx.name] : '') || '';
         const phone = (idx.phone >= 0 ? r[idx.phone] : '') || '';
-        if (!name && !phone) continue;
+        const shortPhone = (idx.shortPhone >= 0 ? r[idx.shortPhone] : '') || '';
+        if (!name && !phone && !shortPhone) continue;
+        const rawDept = idx.department >= 0 ? String(r[idx.department] || '').trim() : '';
+        const rawTeam = idx.team >= 0 ? String(r[idx.team] || '').trim() : '';
+        // 跳过「值班电话」类条目（班组值班电话卡，非人员）
+        if (rawDept === '值班电话') continue;
+        // 一级部门 → 项目部 映射（鱼山项目X部→项目X部 等）
+        const department = CONFIG.mapDepartment(rawDept, rawTeam);
         people.push({
           name: String(name).trim(),
           phone: String(phone).trim(),
-          team: idx.team >= 0 ? String(r[idx.team] || '').trim() : '',
-          department: idx.department >= 0 ? String(r[idx.department] || '').trim() : '',
+          shortPhone: String(shortPhone).trim(),
+          team: rawTeam,
+          department: department,
         });
       }
-      if (people.length === 0) { alert('未能解析到有效人员数据，请检查列名（需包含 姓名/电话）'); return; }
+      if (people.length === 0) { alert('未能解析到有效人员数据，请检查列名（需包含 姓名/工作号码/一级部门 等）'); return; }
 
       // 预览确认
       const overlay = modal(`
         <div class="modal-title">导入预览（${people.length} 人）</div>
         <div class="table-wrap" style="max-height:320px;overflow:auto">
-          <table class="grid-table"><thead><tr><th>姓名</th><th>电话</th><th>班组</th><th>部门</th></tr></thead>
-          <tbody>${people.slice(0, 100).map(p => `<tr><td>${__esc(p.name)}</td><td>${__esc(p.phone)}</td><td>${__esc(p.team)}</td><td>${__esc(p.department)}</td></tr>`).join('')}</tbody></table>
+          <table class="grid-table"><thead><tr><th>姓名</th><th>长号</th><th>短号</th><th>班组(二级部门)</th><th>部门(一级部门)</th></tr></thead>
+          <tbody>${people.slice(0, 100).map(p => `<tr><td>${__esc(p.name)}</td><td>${__esc(p.phone)}</td><td>${__esc(p.shortPhone)}</td><td>${__esc(p.team)}</td><td>${__esc(p.department)}</td></tr>`).join('')}</tbody></table>
         </div>
         ${people.length > 100 ? '<div class="muted">（仅预览前100条）</div>' : ''}
         <div class="modal-actions">
@@ -252,10 +268,10 @@ window.VPersonnel = (function () {
 
   function exportExcel() {
     const people = Store.listPersonnel();
-    const aoa = [['姓名', '联系电话', '班组', '部门']];
-    people.forEach(p => aoa.push([p.name, p.phone, p.team, p.department]));
+    const aoa = [['姓名', '工作号码', '集团短号', '班组', '部门']];
+    people.forEach(p => aoa.push([p.name, p.phone, p.shortPhone, p.team, p.department]));
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 22 }, { wch: 16 }];
+    ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 16 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '人员信息');
     XLSX.writeFile(wb, `人员信息_${new Date().toISOString().slice(0, 10)}.xlsx`);
