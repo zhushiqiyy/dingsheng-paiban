@@ -143,18 +143,25 @@ html, body {
 .dept-bar label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #4b5563; }
 .dept-bar select { padding: 6px 8px; }
 
-/* ---------- 编辑器布局 ---------- */
+/* ---------- 编辑器布局（三栏） ---------- */
 .editor-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .editor-bar label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #4b5563; }
 .editor-bar select { padding: 6px 8px; }
-.editor-body { display: flex; gap: 16px; align-items: flex-start; }
-.editor-left { width: 280px; flex-shrink: 0; position: sticky; top: 72px; }
-.editor-right { flex: 1; min-width: 0; }
+.editor-body, .s3-body { display: flex; gap: 16px; align-items: flex-start; }
+.editor-left { width: 260px; flex-shrink: 0; position: sticky; top: 72px; }
+.editor-center { flex: 1; min-width: 0; }
+.editor-right-side { width: 220px; flex-shrink: 0; position: sticky; top: 72px; }
+
+/* ---------- 保存状态 ---------- */
+.save-state { font-size: 13px; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+.save-state.draft { color: #b45309; background: #fef3c7; }
+.save-state.submitted { color: #15803d; background: #dcfce7; }
 
 /* ---------- 人员面板 ---------- */
 .pp-panel { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.pp-team { width: 100%; padding: 8px 10px; border: none; border-bottom: 1px solid var(--border); font-size: 13px; outline: none; background: #fff; }
 .pp-search { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid var(--border); font-size: 13px; outline: none; }
-.pp-list { max-height: 560px; overflow: auto; padding: 8px; }
+.pp-list { max-height: 520px; overflow: auto; padding: 8px; }
 .pp-group { padding: 8px 6px 4px; font-size: 12px; font-weight: 600; color: var(--primary); }
 .pp-item {
   display: flex; flex-direction: column; padding: 8px 10px; border-radius: 8px; cursor: grab;
@@ -166,6 +173,25 @@ html, body {
 .pp-phone { font-size: 12px; color: var(--muted); }
 .pp-tag { display: inline-block; margin-top: 3px; font-size: 11px; color: var(--primary); background: #eaf1ff; padding: 1px 6px; border-radius: 4px; align-self: flex-start; }
 .pp-empty { padding: 20px; text-align: center; color: var(--muted); }
+
+/* ---------- 功能栏（组合拖入） ---------- */
+.bundle-panel { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px; }
+.bundle-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.bundle-sub { font-size: 12px; font-weight: 600; color: #4b5563; margin: 10px 0 6px; }
+.bundle-hint { font-size: 12px; color: var(--muted); padding: 8px; background: #f7f9fc; border-radius: 6px; margin-bottom: 6px; line-height: 1.5; }
+.bundle-item { cursor: grab; }
+.bundle-item .pp-name { color: var(--primary); }
+
+/* ---------- 组合编辑 ---------- */
+.be-body { border: 1px solid var(--border); border-radius: 8px; padding: 6px; max-height: 420px; overflow: auto; }
+.be-selected { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border-bottom: 1px dashed var(--border); margin-bottom: 6px; min-height: 30px; }
+.be-chip { display: inline-flex; align-items: center; gap: 4px; background: #eaf1ff; color: var(--primary); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+.be-chip b { cursor: pointer; color: var(--danger); font-weight: 700; }
+.be-list { max-height: 300px; overflow: auto; }
+
+/* ---------- 单元格多人 ---------- */
+.cell-person { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cell-person .cell-name { white-space: nowrap; }
 
 /* ---------- 值班表网格（2列） ---------- */
 .duty-grid-box { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; overflow-x: auto; }
@@ -260,10 +286,10 @@ html, body {
 .eg-phone { font-size: 12px; color: var(--muted); }
 .eg-tag { font-size: 11px; color: var(--primary); background: #eaf1ff; padding: 1px 6px; border-radius: 4px; margin-left: auto; }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .editor-body, .s3-body { flex-direction: column; }
-  .editor-left { width: 100%; position: static; }
-  .pp-list { max-height: 260px; }
+  .editor-left, .editor-right-side { width: 100%; position: static; }
+  .pp-list { max-height: 240px; }
   .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; }
   .topbar-right { margin-left: 0; }
 }
