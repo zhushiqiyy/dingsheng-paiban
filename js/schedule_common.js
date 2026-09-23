@@ -64,7 +64,7 @@ window.Schedule = (function () {
       if (filtered.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'pp-empty';
-        empty.textContent = '无匹配人员';
+        empty.textContent = opts.emptyText || '无匹配人员';
         list.appendChild(empty);
       }
     }
