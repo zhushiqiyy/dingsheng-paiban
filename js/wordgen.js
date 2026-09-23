@@ -25,6 +25,7 @@ window.WordGen = (function () {
       children,
       alignment: opts.align != null ? opts.align : docx.AlignmentType.CENTER,
       spacing: { before: opts.before || 0, after: opts.after || 0, line: opts.line || 276 },
+      pageBreakBefore: !!opts.pageBreakBefore,
     });
   }
 
@@ -60,12 +61,16 @@ window.WordGen = (function () {
     return phone ? `${p.name}\n${phone}` : p.name;
   }
 
-  /** 人员格段落（姓名一行 + 电话一行） */
+  /** 人员格段落（姓名一行 + 电话一行，支持多人） */
   function personCellParas(p) {
-    if (!p || !p.name) return [para('', { size: 20 })];
-    const phone = Utils.phoneText(p);
-    const paras = [para(p.name, { size: 20 })];
-    if (phone) paras.push(para(phone, { size: 18 }));
+    const list = Array.isArray(p) ? p.filter(x => x && x.name) : (p && p.name ? [p] : []);
+    if (!list.length) return [para('', { size: 20 })];
+    const paras = [];
+    list.forEach(person => {
+      paras.push(para(person.name, { size: 20 }));
+      const phone = Utils.phoneText(person);
+      if (phone) paras.push(para(phone, { size: 18 }));
+    });
     return paras;
   }
 
@@ -120,10 +125,12 @@ window.WordGen = (function () {
       rows.push(new docx.TableRow({ children: cells }));
     }
 
-    // 说明/备注
+    // 说明/备注（一条一行）
     const note = data.note || '';
+    const noteLines = note.split('\n').map(s => s.trim()).filter(Boolean);
+    const noteParas = noteLines.length ? noteLines.map(l => para(l, { size: 18, align: docx.AlignmentType.LEFT, line: 240 })) : [para('', { size: 18 })];
     rows.push(new docx.TableRow({
-      children: [cell(para(note, { size: 18, align: docx.AlignmentType.LEFT, line: 240 }), { span: spanAll, valign: docx.VerticalAlign.TOP })],
+      children: [cell(noteParas, { span: spanAll, valign: docx.VerticalAlign.TOP })],
     }));
 
     // 底部签字行（制表/审核/批准 等，放表格内与模板一致）
@@ -170,14 +177,14 @@ window.WordGen = (function () {
     });
   }
 
-  /** 二级值班表（多部门合并） */
+  /** 二级值班表（多部门合并，每个部门单独一页） */
   function buildLevel2(items) {
     const children = [];
-    items.forEach((item) => {
+    items.forEach((item, idx) => {
       const dept = item.dept;
       const data = item.data || {};
       const year = data.year, month = data.month;
-      children.push(para(`${CONFIG.COMPANY.fullName}${year}年${month}月份${dept.name}二级值班表`, { bold: true, size: 33, after: 40 }));
+      children.push(para(`${CONFIG.COMPANY.fullName}${year}年${month}月份${dept.name}二级值班表`, { bold: true, size: 33, after: 40, pageBreakBefore: idx > 0 }));
       children.push(para('', { after: 40 }));
       children.push(para(`发布部门 :  ${dept.name}      发布人 : ${data.publisher || dept.publisher || ''}    发布时间 : ${data.publishDate || ''}`, { align: docx.AlignmentType.LEFT, size: 22, after: 60 }));
       children.push(buildGridTable({ year, month, assignments: data.assignments, tags: data.tags, note: data.note || dept.note }, {
@@ -186,7 +193,6 @@ window.WordGen = (function () {
         headers: ['日期', '值班人', '日期', '值班人'],
         footerText: `审批：　${data.approver || dept.approver || ''}　           　制表： ${data.maker || dept.maker || ''}           　制表日期： ${data.publishDate || ''}`,
       }));
-      children.push(para('', { after: 120 }));
     });
 
     const first = items[0];
