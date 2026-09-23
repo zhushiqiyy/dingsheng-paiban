@@ -56,7 +56,8 @@ window.WordGen = (function () {
   /** 生成人员格文本 */
   function personCellText(p) {
     if (!p || !p.name) return '';
-    return p.phone ? `${p.name}\n${p.phone}` : p.name;
+    const phone = Utils.phoneText(p);
+    return phone ? `${p.name}\n${phone}` : p.name;
   }
 
   /**
