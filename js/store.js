@@ -18,7 +18,8 @@ window.Store = (function () {
           createdAt: Date.now(),
         },
       ],
-      personnel: [],        // {id, name, phone, team, department}
+      personnel: [],        // {id, name, phone(长号), shortPhone(短号), team(二级部门/班组), department(一级部门/项目部)}
+      groups: {},           // 编组：{ userId: [ {id, name, personIds:[]} ] }
       // 排班数据
       schedules: {
         s1: null,   // 一级值班：{year, month, assignments:{day:{name,phone}}, tags:{day:'全天'|'晚'}, note, maker, reviewer, approver, publishDept, publisher, publishDate}
@@ -147,7 +148,7 @@ window.Store = (function () {
   }
   function addPerson(person) {
     const d = load();
-    const p = { id: Utils.uid(), name: '', phone: '', team: '', department: '', ...person };
+    const p = { id: Utils.uid(), name: '', phone: '', shortPhone: '', team: '', department: '', ...person };
     d.personnel.push(p);
     save();
     return p;
@@ -161,21 +162,63 @@ window.Store = (function () {
   function removePerson(id) {
     const d = load();
     d.personnel = d.personnel.filter(x => x.id !== id);
+    // 同时从所有编组中移除
+    for (const uid in d.groups) {
+      d.groups[uid] = (d.groups[uid] || []).map(g => ({ ...g, personIds: g.personIds.filter(pid => pid !== id) }));
+    }
     save();
   }
   function importPersonnel(rows) {
-    // rows: [{name, phone, team, department}]
+    // rows: [{name, phone, shortPhone, team, department}]
     const d = load();
     let added = 0;
     for (const r of rows) {
       const name = (r.name || '').trim();
       const phone = (r.phone || '').trim();
-      if (!name && !phone) continue;
-      d.personnel.push({ id: Utils.uid(), name, phone, team: (r.team || '').trim(), department: (r.department || '').trim() });
+      const shortPhone = (r.shortPhone || '').trim();
+      if (!name && !phone && !shortPhone) continue;
+      d.personnel.push({
+        id: Utils.uid(), name, phone, shortPhone,
+        team: (r.team || '').trim(), department: (r.department || '').trim(),
+      });
       added++;
     }
     save();
     return added;
+  }
+
+  /* ---------- 编组（普通用户自定义备选人员栏） ---------- */
+  function listGroups(userId) {
+    return (load().groups || {})[userId] || [];
+  }
+  function addGroup(userId, name, personIds) {
+    const d = load();
+    d.groups = d.groups || {};
+    d.groups[userId] = d.groups[userId] || [];
+    const g = { id: Utils.uid(), name: name || '未命名编组', personIds: personIds || [] };
+    d.groups[userId].push(g);
+    save();
+    return g;
+  }
+  function updateGroup(userId, groupId, patch) {
+    const d = load();
+    const g = ((d.groups || {})[userId] || []).find(x => x.id === groupId);
+    if (g) { Object.assign(g, patch); save(); }
+    return g;
+  }
+  function removeGroup(userId, groupId) {
+    const d = load();
+    if (d.groups && d.groups[userId]) {
+      d.groups[userId] = d.groups[userId].filter(x => x.id !== groupId);
+    }
+    save();
+  }
+  /** 按编组 id 取人员列表 */
+  function groupPersons(userId, groupId) {
+    const g = listGroups(userId).find(x => x.id === groupId);
+    if (!g) return [];
+    const all = load().personnel;
+    return g.personIds.map(id => all.find(p => p.id === id)).filter(Boolean);
   }
 
   /* ---------- 班组 ---------- */
@@ -247,6 +290,7 @@ window.Store = (function () {
     listUsers, resetUserPassword, deleteUser,
     listPersonnel, addPerson, updatePerson, removePerson, importPersonnel,
     teamsOf, allDepartmentNames,
+    listGroups, addGroup, updateGroup, removeGroup, groupPersons,
     getS1, setS1, getS2, setS2, getS3, setS3, getS4, setS4,
     getLastInput, setLastInput,
     exportAll, importAll, clearAll,
