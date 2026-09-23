@@ -60,6 +60,15 @@ window.WordGen = (function () {
     return phone ? `${p.name}\n${phone}` : p.name;
   }
 
+  /** 人员格段落（姓名一行 + 电话一行） */
+  function personCellParas(p) {
+    if (!p || !p.name) return [para('', { size: 20 })];
+    const phone = Utils.phoneText(p);
+    const paras = [para(p.name, { size: 20 })];
+    if (phone) paras.push(para(phone, { size: 18 }));
+    return paras;
+  }
+
   /**
    * 构建一级/二级共用的值班表网格
    * @param {object} data { year, month, assignments, tags, note }
@@ -99,11 +108,11 @@ window.WordGen = (function () {
       const cells = [];
       const lt = tags[leftDay] || Utils.dayTag(year, month, leftDay);
       cells.push(cell(para(dateCellText(leftDay, lt), { bold: true, size: 22 }), { fill: lt === '全天' ? 'FFF200' : undefined }));
-      cells.push(cell(para(personCellText(assign[leftDay]), { size: 20 })));
+      cells.push(cell(personCellParas(assign[leftDay])));
       if (rightDay <= days) {
         const rt = tags[rightDay] || Utils.dayTag(year, month, rightDay);
         cells.push(cell(para(dateCellText(rightDay, rt), { bold: true, size: 22 }), { fill: rt === '全天' ? 'FFF200' : undefined }));
-        cells.push(cell(para(personCellText(assign[rightDay]), { size: 20 })));
+        cells.push(cell(personCellParas(assign[rightDay])));
       } else {
         cells.push(cell(para('', { size: 20 })));
         cells.push(cell(para('', { size: 20 })));
@@ -116,6 +125,13 @@ window.WordGen = (function () {
     rows.push(new docx.TableRow({
       children: [cell(para(note, { size: 18, align: docx.AlignmentType.LEFT, line: 240 }), { span: spanAll, valign: docx.VerticalAlign.TOP })],
     }));
+
+    // 底部签字行（制表/审核/批准 等，放表格内与模板一致）
+    if (opts.footerText) {
+      rows.push(new docx.TableRow({
+        children: [cell(para(opts.footerText, { size: 21, align: docx.AlignmentType.LEFT }), { span: spanAll })],
+      }));
+    }
 
     return new docx.Table({
       rows,
@@ -147,8 +163,8 @@ window.WordGen = (function () {
             colWidths: [1505, 3334, 1425, 3149],
             titleSuffix: '干部值班表',
             headers: ['日期', '值班人及其手机号', '日期', '值班人及其手机号'],
+            footerText: `制表：${data.maker || ''}            审核：${data.reviewer || ''}            批准：${data.approver || ''}`,
           }),
-          para(`制表：${data.maker || ''}            审核：${data.reviewer || ''}            批准：${data.approver || ''}`, { align: docx.AlignmentType.LEFT, size: 22, before: 60 }),
         ],
       }],
     });
@@ -168,8 +184,9 @@ window.WordGen = (function () {
         colWidths: [1297, 3721, 1352, 3443],
         titleSuffix: '值班表',
         headers: ['日期', '值班人', '日期', '值班人'],
+        footerText: `审批：　${data.approver || dept.approver || ''}　           　制表： ${data.maker || dept.maker || ''}           　制表日期： ${data.publishDate || ''}`,
       }));
-      children.push(para(`审批：　${data.approver || dept.approver || ''}　           　制表： ${data.maker || dept.maker || ''}           　制表日期： ${data.publishDate || ''}`, { align: docx.AlignmentType.LEFT, size: 22, before: 60, after: 120 }));
+      children.push(para('', { after: 120 }));
     });
 
     const first = items[0];
