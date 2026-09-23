@@ -45,6 +45,7 @@ window.VS1 = (function () {
       signers: { maker: s1.maker, reviewer: s1.reviewer, approver: s1.approver },
       candidatePersons: candidates,
       groupByTeam: false,
+      emptyText: '暂无候选人员，请点击右上「⚙ 管理候选人员」勾选干部/领导名单，保存后即可在此拖动排班',
       maxPerCell: 2,
       userId: (App.currentUser() && App.currentUser().id),
       departmentName: '',
