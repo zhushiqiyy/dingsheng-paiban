@@ -216,14 +216,19 @@ window.VS4 = (function () {
       }
       return o;
     }
-    // 班组值班 -> 班组（全天）
+    // 班组值班 -> 班组（全天，格子可能多人，取全部用「、」连接）
     function fillS3(deptId, teamName) {
       const o = emptyDays();
       const s3 = Store.getS3(deptId);
       if (s3) {
         dates.forEach(dt => {
-          const p = s3.cells && s3.cells[dt.d] && s3.cells[dt.d][teamName];
-          if (p && p.name) o[dayKey(dt)] = { day: { name: p.name, phone: p.phone }, night: { name: p.name, phone: p.phone } };
+          const raw = s3.cells && s3.cells[dt.d] && s3.cells[dt.d][teamName];
+          const list = Array.isArray(raw) ? raw : (raw && raw.name ? [raw] : []);
+          if (list.length) {
+            const name = list.map(p => p.name).join('、');
+            const phone = list.map(p => Utils.phoneText(p)).filter(Boolean).join('、');
+            o[dayKey(dt)] = { day: { name, phone }, night: { name, phone } };
+          }
         });
       }
       return o;
