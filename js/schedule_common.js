@@ -418,9 +418,110 @@ window.Schedule = (function () {
     return overlay;
   }
 
+  /**
+   * 组合构建区（左侧内联）：拖入人员到「我的组合」→ 命名 → 创建，无需弹窗
+   * @param container DOM
+   * @param {object} cfg { userId, departmentName, onBundleDrop(persons), onChanged() }
+   */
+  function bundleBuilder(container, cfg) {
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'bundle-builder';
+
+    const head = document.createElement('div');
+    head.className = 'bundle-sub';
+    head.textContent = '🧩 我的组合（拖人进来 → 创建）';
+    wrap.appendChild(head);
+
+    // 待创建组合区（可拖入人员）
+    const drop = document.createElement('div');
+    drop.className = 'bb-drop';
+    drop.textContent = '把人员拖到这里，组成有序组合';
+    wrap.appendChild(drop);
+    const pending = [];
+    const pendingBox = document.createElement('div');
+    pendingBox.className = 'bb-pending';
+    wrap.appendChild(pendingBox);
+
+    function renderPending() {
+      pendingBox.innerHTML = '';
+      pending.forEach((p, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'be-chip';
+        chip.innerHTML = `${i + 1}.${esc(p.name)}<b data-i="${i}">×</b>`;
+        pendingBox.appendChild(chip);
+      });
+      pendingBox.querySelectorAll('b[data-i]').forEach(b => b.addEventListener('click', () => {
+        pending.splice(+b.getAttribute('data-i'), 1);
+        renderPending();
+      }));
+    }
+    Schedule.makeDroppable(drop, {
+      onDrop(payload) {
+        const persons = payload && payload.bundle ? payload.persons : (payload && payload.name ? [payload] : []);
+        persons.forEach(p => { if (!pending.some(x => x.id === p.id)) pending.push(p); });
+        renderPending();
+      },
+      onClear() { pending.pop(); renderPending(); },
+    });
+
+    // 名称 + 创建
+    const nameRow = document.createElement('div');
+    nameRow.className = 'bb-namerow';
+    const nameInp = document.createElement('input');
+    nameInp.className = 'inp';
+    nameInp.placeholder = '组合名称（如：1号-2号-3号）';
+    const createBtn = document.createElement('button');
+    createBtn.className = 'btn btn-primary';
+    createBtn.textContent = '创建组合';
+    nameRow.appendChild(nameInp); nameRow.appendChild(createBtn);
+    wrap.appendChild(nameRow);
+    createBtn.addEventListener('click', () => {
+      if (pending.length < 2) { alert('请先拖入至少 2 人组成组合'); return; }
+      const name = nameInp.value.trim() || ('组合' + (Store.listBundles(cfg.userId).length + 1));
+      Store.addBundle(cfg.userId, name, pending.map(p => p.id));
+      pending.length = 0; nameInp.value = ''; renderPending();
+      if (cfg.onChanged) cfg.onChanged();
+    });
+
+    // 已有组合列表（可拖出到排班表）
+    const list = document.createElement('div');
+    list.className = 'bb-list';
+    wrap.appendChild(list);
+    function renderList() {
+      list.innerHTML = '';
+      const bundles = Store.listBundles(cfg.userId);
+      if (!bundles.length) {
+        const hint = document.createElement('div');
+        hint.className = 'bundle-hint';
+        hint.textContent = '暂无组合。';
+        list.appendChild(hint);
+      }
+      const all = Store.listPersonnel();
+      bundles.forEach(b => {
+        const persons = b.personIds.map(id => all.find(p => p.id === id)).filter(Boolean);
+        const row = document.createElement('div');
+        row.className = 'bb-row';
+        const item = makeBundleItem(persons, b.name, persons.map(p => p.name).join(' → '), cfg.onBundleDrop);
+        item.style.flex = '1';
+        const del = document.createElement('span');
+        del.className = 'bb-del';
+        del.textContent = '✕';
+        del.title = '删除组合';
+        del.addEventListener('click', () => { Store.removeBundle(cfg.userId, b.id); renderList(); if (cfg.onChanged) cfg.onChanged(); });
+        row.appendChild(item); row.appendChild(del);
+        list.appendChild(row);
+      });
+    }
+    renderList();
+
+    container.appendChild(wrap);
+    return { refresh: renderList, renderPending };
+  }
+
   return {
     renderPersonPanel, makeDroppable, readClipboard, writeClipboard,
     getDragPayload: () => _dragPayload,
-    groupManager, bundlePanel, bundleEditor, makeBundleItem,
+    groupManager, bundlePanel, bundleEditor, bundleBuilder, makeBundleItem,
   };
 })();
