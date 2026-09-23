@@ -1,5 +1,6 @@
 /* ============================================================
  * 视图：班组值班（Excel 多表）
+ * 一个格子可填 1-3 人，支持组合拖入/依次拖入/复制粘贴/保存提交/智能记忆
  * ============================================================ */
 window.VS3 = (function () {
 
@@ -12,6 +13,8 @@ window.VS3 = (function () {
     { deptId: 'zonghe', deptName: '综合维修部', sheetName: '综合维修部（全厂性）', title: '综合维修部班组值班表' },
   ];
 
+  const MAX_CELL = 3;
+
   function nextMonth() {
     const now = new Date();
     let y = now.getFullYear(), m = now.getMonth() + 1;
@@ -19,9 +22,17 @@ window.VS3 = (function () {
     return { year: y, month: m };
   }
 
-  // 用户所属部门 → 班组值班单元
   function unitForDeptName(deptName) {
     return BANZU_UNITS.find(u => u.deptName === deptName) || null;
+  }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // 归一化格子数据为数组（兼容旧的单对象）
+  function normCell(cell) {
+    if (!cell) return [];
+    if (Array.isArray(cell)) return cell.filter(p => p && p.name);
+    return [cell];
   }
 
   function render(main) {
@@ -53,31 +64,42 @@ window.VS3 = (function () {
           <label>年份 <select id="s3-year">${yearOptions(s3.year)}</select></label>
           <label>月份 <select id="s3-month">${monthOptions(s3.month)}</select></label>
           <span class="spacer"></span>
+          <span class="save-state" id="s3-state"></span>
+          <button id="s3-save" class="btn">💾 保存</button>
+          <button id="s3-submit" class="btn btn-primary">✅ 提交</button>
           <button id="s3-export-all" class="btn btn-primary">📤 导出 Excel（多表）</button>`;
       } else {
         bar.innerHTML = `<div class="dept-title">${unit.title}</div>
           <label>年份 <select id="s3-year">${yearOptions(s3.year)}</select></label>
           <label>月份 <select id="s3-month">${monthOptions(s3.month)}</select></label>
           <span class="spacer"></span>
+          <span class="save-state" id="s3-state"></span>
+          <button id="s3-save" class="btn">💾 保存</button>
+          <button id="s3-submit" class="btn btn-primary">✅ 提交</button>
           <button id="s3-export-one" class="btn btn-primary">📤 导出本部门 Excel</button>`;
       }
       main.appendChild(bar);
 
-      // 主体
+      // 主体三栏
       const body = document.createElement('div');
       body.className = 's3-body';
-      const left = document.createElement('div');
-      left.className = 'editor-left';
-      const right = document.createElement('div');
-      right.className = 'editor-right';
-      body.appendChild(left); body.appendChild(right);
+      const left = document.createElement('div'); left.className = 'editor-left';
+      const center = document.createElement('div'); center.className = 'editor-center';
+      const right = document.createElement('div'); right.className = 'editor-right-side';
+      body.appendChild(left); body.appendChild(center); body.appendChild(right);
       main.appendChild(body);
 
-      // 左面板（按班组分组）
+      // 左：人员面板（组织关系筛选）
       Schedule.renderPersonPanel(left, candidates, { groupByTeam: true });
 
-      // 网格
-      renderGrid(right, unit, teams, days);
+      // 中：网格
+      renderGrid(center, unit, teams, days);
+
+      // 右：功能栏（组合拖入 + 智能记忆）
+      Schedule.bundlePanel(right, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onManage: () => Schedule.bundleEditor(u.id, unit.deptName, refreshBundle) });
+      function refreshBundle() {
+        Schedule.bundlePanel(right, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onManage: () => Schedule.bundleEditor(u.id, unit.deptName, refreshBundle) });
+      }
 
       // 事件
       const onYM = () => {
@@ -100,22 +122,49 @@ window.VS3 = (function () {
       } else {
         bar.querySelector('#s3-export-one').addEventListener('click', exportOne);
       }
+
+      // 保存/提交
+      bar.querySelector('#s3-save').addEventListener('click', () => { Store.setS3(unit.deptId, s3); recordCo(); flash('已保存'); });
+      bar.querySelector('#s3-submit').addEventListener('click', () => {
+        if (!confirm('确定提交当前班组值班？提交后视为定稿。')) return;
+        Store.setS3(unit.deptId, s3); recordCo();
+        Store.setSubmit('s3', unit.deptId, true);
+        updateState();
+        flash('已提交');
+      });
+      function updateState() {
+        const st = document.getElementById('s3-state');
+        const rec = Store.getSubmit('s3', unit.deptId);
+        if (st) { st.textContent = rec && rec.submitted ? '✅ 已提交' : '● 未提交'; st.className = 'save-state ' + (rec && rec.submitted ? 'submitted' : 'draft'); }
+      }
+      function flash(msg) {
+        const st = document.getElementById('s3-state');
+        if (st) { st.textContent = msg; setTimeout(updateState, 1500); }
+      }
+      updateState();
     }
 
-    function renderGrid(right, unit, teams, days) {
-      right.innerHTML = '';
+    function recordCo() {
+      const ordered = [];
+      for (let d = 1; d <= Utils.daysInMonth(s3.year, s3.month); d++) {
+        const row = s3.cells[d] || {};
+        Object.values(row).forEach(cell => normCell(cell).forEach(p => ordered.push(p)));
+      }
+      Store.recordCoMemory(ordered);
+    }
+
+    function renderGrid(center, unit, teams, days) {
+      center.innerHTML = '';
       const box = document.createElement('div');
       box.className = 's3-grid-box';
 
-      // 操作提示
       const tip = document.createElement('div');
       tip.className = 'grid-tip';
-      tip.innerHTML = '提示：拖拽左侧人员到单元格；点击单元格后 Ctrl+C 复制 / Ctrl+V 粘贴 / Ctrl+X 剪切；右键清空；拖动已填单元格可复制到其它格。';
+      tip.innerHTML = '提示：拖入人员/组合到单元格（一格可 1-3 人，右键清空单人）；点击格子后 Ctrl+C 复制 / Ctrl+V 粘贴 / Ctrl+X 剪切 / Delete 删除；拖动已填格可移动复制。';
       box.appendChild(tip);
 
       const table = document.createElement('table');
       table.className = 's3-table';
-      // 表头
       const thead = document.createElement('thead');
       const hr = document.createElement('tr');
       const hDate = document.createElement('th'); hDate.className = 's3-date-head'; hDate.textContent = '日期';
@@ -142,8 +191,7 @@ window.VS3 = (function () {
           td.className = 's3-cell';
           td.setAttribute('data-date', d);
           td.setAttribute('data-team', t.name);
-          const p = (s3.cells[d] && s3.cells[d][t.name]) || null;
-          renderCellContent(td, p);
+          renderCellContent(td, normCell(s3.cells[d] && s3.cells[d][t.name]));
           attachCellHandlers(td, d, t.name);
           tr.appendChild(td);
         });
@@ -151,64 +199,76 @@ window.VS3 = (function () {
       }
       table.appendChild(tbody);
       box.appendChild(table);
-      right.appendChild(box);
+      center.appendChild(box);
     }
 
-    function renderCellContent(td, p) {
+    function renderCellContent(td, list) {
       td.innerHTML = '';
-      if (p && p.name) {
-        const n = document.createElement('div'); n.className = 'cell-name'; n.textContent = p.name;
-        const ph = Utils.phoneText(p);
-        if (ph) { const el = document.createElement('div'); el.className = 'cell-phone'; el.textContent = ph; td.appendChild(el); }
-        td.appendChild(n);
+      if (list.length > 0) {
+        list.forEach(p => {
+          const wrap = document.createElement('div');
+          wrap.className = 'cell-person';
+          const n = document.createElement('span'); n.className = 'cell-name'; n.textContent = p.name;
+          const ph = Utils.phoneText(p);
+          wrap.appendChild(n);
+          if (ph) { const s = document.createElement('span'); s.className = 'cell-phone'; s.textContent = ph; wrap.appendChild(s); }
+          td.appendChild(wrap);
+        });
         td.classList.add('filled');
         td.draggable = true;
       } else {
-        td.innerHTML = '';
         td.classList.remove('filled');
         td.draggable = false;
       }
     }
 
-    let clipboard = null; // {name, phone}
+    let clipboard = null; // 数组
 
     function attachCellHandlers(td, date, team) {
-      const getP = () => (s3.cells[date] && s3.cells[date][team]) || null;
-      const setP = (p) => {
+      const getList = () => normCell(s3.cells[date] && s3.cells[date][team]);
+      const setList = (list) => {
         if (!s3.cells[date]) s3.cells[date] = {};
-        s3.cells[date][team] = p;
+        s3.cells[date][team] = list.slice(0, MAX_CELL);
         Store.setS3(unit.deptId, s3);
-        renderCellContent(td, p);
+        renderCellContent(td, normCell(s3.cells[date][team]));
       };
-      const clear = () => {
-        if (s3.cells[date]) { delete s3.cells[date][team]; }
-        Store.setS3(unit.deptId, s3);
-        renderCellContent(td, null);
+      const addPerson = (p) => {
+        const list = getList();
+        if (list.length >= MAX_CELL) { alert(`一个格子最多 ${MAX_CELL} 人`); return; }
+        list.push(p); setList(list);
       };
 
-      // 放置（来自左面板或拖动的单元格）
       Schedule.makeDroppable(td, {
-        onDrop(p) { setP({ name: p.name, phone: p.phone }); },
-        onClear: clear,
+        onDrop(payload) {
+          if (payload && payload.bundle) {
+            const list = getList();
+            payload.persons.forEach(p => { if (list.length < MAX_CELL) list.push(p); });
+            setList(list);
+          } else if (payload && payload.name) {
+            addPerson(payload);
+          }
+        },
+        onClear() {
+          const list = getList();
+          list.pop();
+          setList(list);
+        },
       });
 
-      // 拖动已填单元格（复制）
       td.addEventListener('dragstart', (e) => {
-        const p = getP();
-        if (p) { e.dataTransfer.setData('text/plain', JSON.stringify(p)); e.dataTransfer.effectAllowed = 'copy'; }
+        const list = getList();
+        if (list.length) { e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/plain', JSON.stringify(list)); }
       });
-
-      // 点击选中
       td.addEventListener('click', () => {
         document.querySelectorAll('.s3-cell.selected').forEach(x => x.classList.remove('selected'));
         td.classList.add('selected');
       });
-
-      // 键盘复制粘贴
       td.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c') { const p = getP(); if (p) clipboard = { ...p }; }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'x') { const p = getP(); if (p) { clipboard = { ...p }; clear(); } }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (clipboard) setP({ ...clipboard }); }
+        const list = getList();
+        if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (list.length) clipboard = list.map(p => ({ ...p })); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'x') { if (list.length) { clipboard = list.map(p => ({ ...p })); setList([]); } }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (clipboard && clipboard.length) setList(getList().concat(clipboard)); }
+        if (e.key === 'Delete' || e.key === 'Backspace') { if (list.length) { list.pop(); setList(list); } }
       });
       td.tabIndex = 0;
     }
@@ -228,8 +288,6 @@ window.VS3 = (function () {
       const wb = ExcelGen.buildBanzuWorkbook(deptList, { year: s3.year, month: s3.month });
       ExcelGen.download(wb, `班组夜间值班表汇总_${s3.year}年${s3.month}月份.xlsx`);
     }
-
-    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
     renderUnit();
   }
