@@ -19,6 +19,7 @@ window.Store = (function () {
         },
       ],
       personnel: [],        // {id, name, phone(长号), shortPhone(短号), team(二级部门/班组), department(一级部门/项目部)}
+      leaderIds: [],        // 一级值班候选人员（干部/领导）id 列表，管理员维护
       groups: {},           // 编组：{ userId: [ {id, name, personIds:[]} ] }
       bundles: {},          // 组合/捆绑：{ userId: [ {id, name, personIds:[]（有序）} ] }
       coMemory: {},         // 相邻人员共现记忆：{ "personId|personId": count }
@@ -26,7 +27,7 @@ window.Store = (function () {
       submit: {},           // 提交状态：{ s1:{submitted,at}, s2:{deptId:{...}}, s3:{...}, s4:{...} }
       // 排班数据
       schedules: {
-        s1: null,   // 一级值班：{year, month, assignments:{day:{name,phone}}, tags:{day:'全天'|'晚'}, note, maker, reviewer, approver, publishDept, publisher, publishDate}
+        s1: null,   // 一级值班：{year, month, assignments:{day:[{name,phone,...},...]（0-2人，法定假日可2人）}, tags:{day:'全天'|'晚'}, note, maker, reviewer, approver, publishDept, publisher, publishDate}
         s2: {},     // 二级值班：{ deptId: {year, month, assignments, tags, note, approver, maker, publishDate} }
         s3: {},     // 班组值班：{ deptId: {year, month, cells: {date: {teamName: [{name,phone},...]（1-3人）}} } }
         s4: null,   // 节假日值班：{year, holidayName, dates:[...], sheets: {...} }
@@ -300,6 +301,21 @@ window.Store = (function () {
     return d.settings;
   }
 
+  /* ---------- 一级值班候选人员（干部/领导，管理员维护） ---------- */
+  function getLeaderIds() {
+    return load().leaderIds || [];
+  }
+  function setLeaderIds(ids) {
+    const d = load();
+    d.leaderIds = ids || [];
+    save();
+  }
+  function leaderPersons() {
+    const ids = getLeaderIds();
+    const all = load().personnel;
+    return ids.map(id => all.find(p => p.id === id)).filter(Boolean);
+  }
+
   /* ---------- 提交状态 ---------- */
   function getSubmit(section, deptId) {
     const s = load().submit || {};
@@ -394,6 +410,7 @@ window.Store = (function () {
     listBundles, addBundle, updateBundle, removeBundle, bundlePersons,
     recordCoMemory, suggestBundles,
     getSettings, updateSettings,
+    getLeaderIds, setLeaderIds, leaderPersons,
     getSubmit, setSubmit,
     getS1, setS1, getS2, setS2, getS3, setS3, getS4, setS4,
     getLastInput, setLastInput,
