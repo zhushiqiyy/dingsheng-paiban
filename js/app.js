@@ -236,6 +236,12 @@ window.App = (function () {
         <input id="acc-new" type="password" placeholder="新密码">
         <button id="acc-save" class="btn btn-primary">修改密码</button>
       </div>
+      ${u.role === 'admin' ? `
+      <div class="card-subtitle">人员编辑确认密码（人员管理二次确认用，初始 admin123）</div>
+      <div class="field-row">
+        <input id="acc-epw" type="password" placeholder="新确认密码" value="${Store.getSettings().editPassword || ''}">
+        <button id="acc-epw-save" class="btn">保存确认密码</button>
+      </div>` : ''}
       ${u.role !== 'admin' ? `<div class="card-subtitle">注销账号</div><button id="acc-del" class="btn btn-danger">注销我的账号</button>` : ''}
     `;
     main.appendChild(card);
@@ -247,6 +253,15 @@ window.App = (function () {
       const r = Store.changePassword(u.id, oldP, newP);
       alert(r.ok ? '密码修改成功' : r.msg);
     });
+    const epwBtn = card.querySelector('#acc-epw-save');
+    if (epwBtn) {
+      epwBtn.addEventListener('click', () => {
+        const pw = card.querySelector('#acc-epw').value.trim();
+        if (!pw) { alert('确认密码不能为空'); return; }
+        Store.updateSettings({ editPassword: pw });
+        alert('确认密码已更新');
+      });
+    }
     const delBtn = card.querySelector('#acc-del');
     if (delBtn) {
       delBtn.addEventListener('click', () => {
