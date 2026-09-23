@@ -11,9 +11,17 @@ window.VS3 = (function () {
     { deptId: 'sibu', deptName: '项目四部', sheetName: '公用工程事业部', title: '公用工程事业部维保班组值班表' },
     { deptId: 'wubu', deptName: '项目五部', sheetName: '码头储运事业部', title: '码头储运事业部维保班组值班表' },
     { deptId: 'zonghe', deptName: '综合维修部', sheetName: '综合维修部（全厂性）', title: '综合维修部班组值班表' },
+    { deptId: 'famen', deptName: '阀门维修部', sheetName: '阀门维修部（全厂性）', title: '阀门维修部班组值班表' },
+    { deptId: 'qingxi', deptName: '清洗部', sheetName: '清洗部（全厂性）', title: '清洗部班组值班表' },
   ];
 
+  // 需要同步到各事业部最后一列的「全厂性」单元
+  const SYNC_UNIT_IDS = ['zonghe', 'famen', 'qingxi'];
+
   const MAX_CELL = 3;
+
+  // 色块调色板（浅色背景）
+  const PALETTE = ['FFF2CC', 'FFD966', 'FFC7CE', 'D6E4F0', 'E2EFDA', 'FCE4D6', 'D9E1F2', 'F8CBAD'];
 
   function nextMonth() {
     const now = new Date();
@@ -35,6 +43,9 @@ window.VS3 = (function () {
     return [cell];
   }
 
+  // 人员唯一键（姓名+长号+短号；姓名相同手机号不同算不同）
+  function personKey(p) { return p ? (p.name || '') + '|' + (p.phone || '') + '|' + (p.shortPhone || '') : ''; }
+
   function render(main) {
     const u = App.currentUser();
     const admin = u.role === 'admin';
@@ -45,7 +56,11 @@ window.VS3 = (function () {
     }
 
     let s3 = Store.getS3(unit.deptId);
-    if (!s3) { const nm = nextMonth(); s3 = { year: nm.year, month: nm.month, cells: {} }; }
+    if (!s3) { const nm = nextMonth(); s3 = { year: nm.year, month: nm.month, cells: {}, colors: {} }; }
+    if (!s3.colors) s3.colors = {};
+    // 色块填充状态（renderUnit 与 renderGrid 共用）
+    let fillMode = false;
+    let selected = new Set(); // 选中的格子 key `${date}|${team}`
 
     function renderUnit() {
       window.__s3_unit = unit;
@@ -80,26 +95,110 @@ window.VS3 = (function () {
       }
       main.appendChild(bar);
 
-      // 主体三栏
+      // 色块填充模式
+      const fillBtn = document.createElement('button');
+      fillBtn.className = 'btn';
+      fillBtn.textContent = '🎨 色块填充';
+      fillBtn.addEventListener('click', () => {
+        fillMode = !fillMode;
+        fillBtn.classList.toggle('active', fillMode);
+        selected.clear();
+        if (!fillMode) { paletteRow.style.display = 'none'; }
+        else { paletteRow.style.display = 'flex'; }
+        renderGrid(center, unit, teams, days);
+      });
+      bar.appendChild(fillBtn);
+
+      // 调色板（色块填充时显示）
+      const paletteRow = document.createElement('div');
+      paletteRow.className = 'palette-row';
+      paletteRow.style.display = 'none';
+      PALETTE.forEach((color, ci) => {
+        const sw = document.createElement('span');
+        sw.className = 'palette-swatch';
+        sw.style.background = '#' + color;
+        sw.title = '色块 ' + (ci + 1);
+        sw.addEventListener('click', () => {
+          if (selected.size === 0) { alert('请先在表格中点击选中要填色的格子'); return; }
+          selected.forEach(key => { const [d, t] = key.split('|'); if (!s3.colors[d]) s3.colors[d] = {}; s3.colors[d][t] = ci; });
+          Store.setS3(unit.deptId, s3);
+          selected.clear();
+          renderGrid(center, unit, teams, days);
+          renderColorBlocks();
+        });
+        paletteRow.appendChild(sw);
+      });
+      const clearColorBtn = document.createElement('button');
+      clearColorBtn.className = 'btn btn-sm';
+      clearColorBtn.textContent = '清除色块';
+      clearColorBtn.addEventListener('click', () => {
+        if (selected.size === 0) { alert('请先选中要清除色块的格子'); return; }
+        selected.forEach(key => { const [d, t] = key.split('|'); if (s3.colors[d]) delete s3.colors[d][t]; });
+        Store.setS3(unit.deptId, s3);
+        selected.clear();
+        renderGrid(center, unit, teams, days);
+        renderColorBlocks();
+      });
+      paletteRow.appendChild(clearColorBtn);
+      main.appendChild(paletteRow);
+
+      // 主体两栏
       const body = document.createElement('div');
       body.className = 's3-body';
       const left = document.createElement('div'); left.className = 'editor-left';
       const center = document.createElement('div'); center.className = 'editor-center';
-      const right = document.createElement('div'); right.className = 'editor-right-side';
-      body.appendChild(left); body.appendChild(center); body.appendChild(right);
+      body.appendChild(left); body.appendChild(center);
       main.appendChild(body);
 
-      // 左：人员面板（组织关系筛选）
+      // 左：人员面板（组织关系筛选）+ 色块 + 组合构建区
       Schedule.renderPersonPanel(left, candidates, { groupByTeam: true });
+      const colorBox = document.createElement('div');
+      left.appendChild(colorBox);
+      function renderColorBlocks() {
+        colorBox.innerHTML = '';
+        const usedColors = new Set();
+        Object.values(s3.colors || {}).forEach(row => Object.values(row).forEach(ci => usedColors.add(ci)));
+        if (usedColors.size === 0) return;
+        const head = document.createElement('div');
+        head.className = 'bundle-sub';
+        head.textContent = '🎨 色块统一填写（拖人到色块 → 同色格同步）';
+        colorBox.appendChild(head);
+        Array.from(usedColors).sort().forEach(ci => {
+          const block = document.createElement('div');
+          block.className = 'color-block';
+          block.style.background = '#' + PALETTE[ci];
+          block.textContent = `色块 ${ci + 1}`;
+          Schedule.makeDroppable(block, {
+            onDrop(payload) {
+              const persons = payload && payload.bundle ? payload.persons : (payload && payload.name ? [payload] : []);
+              if (!persons.length) return;
+              // 同步：所有该色块的格子填入这些人员
+              let cnt = 0;
+              Object.keys(s3.colors || {}).forEach(d => {
+                Object.keys(s3.colors[d]).forEach(t => {
+                  if (s3.colors[d][t] === ci) {
+                    const existing = normCell(s3.cells[d] && s3.cells[d][t]);
+                    persons.forEach(p => { if (existing.length < MAX_CELL && !existing.some(x => personKey(x) === personKey(p))) existing.push(p); });
+                    if (!s3.cells[d]) s3.cells[d] = {};
+                    s3.cells[d][t] = existing.slice(0, MAX_CELL);
+                    cnt++;
+                  }
+                });
+              });
+              Store.setS3(unit.deptId, s3);
+              renderGrid(center, unit, teams, days);
+              block.textContent = `色块 ${ci + 1} ✓`;
+              setTimeout(() => renderColorBlocks(), 1200);
+            },
+          });
+          colorBox.appendChild(block);
+        });
+      }
+      renderColorBlocks();
+      Schedule.bundleBuilder(left, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onChanged: () => {} });
 
       // 中：网格
       renderGrid(center, unit, teams, days);
-
-      // 右：功能栏（组合拖入 + 智能记忆）
-      Schedule.bundlePanel(right, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onManage: () => Schedule.bundleEditor(u.id, unit.deptName, refreshBundle) });
-      function refreshBundle() {
-        Schedule.bundlePanel(right, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onManage: () => Schedule.bundleEditor(u.id, unit.deptName, refreshBundle) });
-      }
 
       // 事件
       const onYM = () => {
@@ -192,7 +291,18 @@ window.VS3 = (function () {
           td.setAttribute('data-date', d);
           td.setAttribute('data-team', t.name);
           renderCellContent(td, normCell(s3.cells[d] && s3.cells[d][t.name]));
-          attachCellHandlers(td, d, t.name);
+          applyColor(td, d, t.name);
+          // 色块填充模式：点击选中
+          if (fillMode) {
+            td.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const key = d + '|' + t.name;
+              if (selected.has(key)) { selected.delete(key); td.classList.remove('color-sel'); }
+              else { selected.add(key); td.classList.add('color-sel'); }
+            });
+          } else {
+            attachCellHandlers(td, d, t.name);
+          }
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -200,6 +310,15 @@ window.VS3 = (function () {
       table.appendChild(tbody);
       box.appendChild(table);
       center.appendChild(box);
+    }
+
+    function applyColor(td, d, t) {
+      const ci = s3.colors && s3.colors[d] && s3.colors[d][t];
+      if (ci !== undefined && ci !== null) {
+        td.style.background = '#' + PALETTE[ci % PALETTE.length];
+      } else {
+        td.style.background = '';
+      }
     }
 
     function renderCellContent(td, list) {
@@ -224,6 +343,20 @@ window.VS3 = (function () {
 
     let clipboard = null; // 数组
 
+    // 某人员是否已在本表出现（排除当前格）
+    function personUsedElsewhere(p, date, team) {
+      const key = personKey(p);
+      if (!key) return false;
+      for (const d in s3.cells) {
+        const row = s3.cells[d] || {};
+        for (const t in row) {
+          if (String(d) === String(date) && t === team) continue;
+          if (normCell(row[t]).some(x => personKey(x) === key)) return true;
+        }
+      }
+      return false;
+    }
+
     function attachCellHandlers(td, date, team) {
       const getList = () => normCell(s3.cells[date] && s3.cells[date][team]);
       const setList = (list) => {
@@ -235,6 +368,8 @@ window.VS3 = (function () {
       const addPerson = (p) => {
         const list = getList();
         if (list.length >= MAX_CELL) { alert(`一个格子最多 ${MAX_CELL} 人`); return; }
+        if (list.some(x => personKey(x) === personKey(p))) return; // 本格已有
+        if (personUsedElsewhere(p, date, team)) { alert(`「${p.name}」已在本表出现，同一人只能出现一次`); return; }
         list.push(p); setList(list);
       };
 
@@ -242,7 +377,9 @@ window.VS3 = (function () {
         onDrop(payload) {
           if (payload && payload.bundle) {
             const list = getList();
-            payload.persons.forEach(p => { if (list.length < MAX_CELL) list.push(p); });
+            payload.persons.forEach(p => {
+              if (list.length < MAX_CELL && !list.some(x => personKey(x) === personKey(p)) && !personUsedElsewhere(p, date, team)) list.push(p);
+            });
             setList(list);
           } else if (payload && payload.name) {
             addPerson(payload);
@@ -273,19 +410,53 @@ window.VS3 = (function () {
       td.tabIndex = 0;
     }
 
+    // 计算某「全厂性」单元在某日的值班人员（跨班组去重）
+    function syncCellsFor(unitId) {
+      const s = Store.getS3(unitId) || {};
+      const res = {};
+      const days = Utils.daysInMonth(s3.year, s3.month);
+      for (let d = 1; d <= days; d++) {
+        const row = (s.cells && s.cells[d]) || {};
+        const seen = new Set();
+        const people = [];
+        Object.values(row).forEach(cell => {
+          normCell(cell).forEach(p => {
+            const key = (p.name || '') + '|' + (p.phone || '') + '|' + (p.shortPhone || '');
+            if (p.name && !seen.has(key)) { seen.add(key); people.push(p); }
+          });
+        });
+        res[d] = people;
+      }
+      return res;
+    }
+
     function exportOne() {
       const teams = Store.teamsOf(unit.deptName);
-      const deptList = [{ deptName: unit.sheetName, teams, cells: s3.cells }];
-      const wb = ExcelGen.buildBanzuWorkbook(deptList, { year: s3.year, month: s3.month });
+      const dept = { deptName: unit.sheetName, title: unit.title, teams, cells: s3.cells, syncCols: [] };
+      // 事业部单元导出时附加全厂性同步列
+      if (SYNC_UNIT_IDS.indexOf(unit.deptId) === -1) {
+        dept.syncCols = SYNC_UNIT_IDS.map(uid => {
+          const u = BANZU_UNITS.find(x => x.deptId === uid);
+          return { label: u.sheetName, cells: syncCellsFor(uid) };
+        });
+      }
+      const wb = ExcelGen.buildBanzuWorkbook([dept], null, { year: s3.year, month: s3.month });
       ExcelGen.download(wb, `${unit.sheetName}${s3.year}年${s3.month}月份班组夜间值班表.xlsx`);
     }
 
     function exportAll() {
       const deptList = BANZU_UNITS.map(x => {
         const s = Store.getS3(x.deptId) || { year: s3.year, month: s3.month, cells: {} };
-        return { deptName: x.sheetName, teams: Store.teamsOf(x.deptName), cells: s.cells };
+        const dept = { deptName: x.sheetName, title: x.title, teams: Store.teamsOf(x.deptName), cells: s.cells, syncCols: [] };
+        if (SYNC_UNIT_IDS.indexOf(x.deptId) === -1) {
+          dept.syncCols = SYNC_UNIT_IDS.map(uid => {
+            const u = BANZU_UNITS.find(y => y.deptId === uid);
+            return { label: u.sheetName, cells: syncCellsFor(uid) };
+          });
+        }
+        return dept;
       });
-      const wb = ExcelGen.buildBanzuWorkbook(deptList, { year: s3.year, month: s3.month });
+      const wb = ExcelGen.buildBanzuWorkbook(deptList, null, { year: s3.year, month: s3.month });
       ExcelGen.download(wb, `班组夜间值班表汇总_${s3.year}年${s3.month}月份.xlsx`);
     }
 
