@@ -150,10 +150,17 @@ window.VS3 = (function () {
       body.appendChild(left); body.appendChild(center);
       main.appendChild(body);
 
-      // 左：人员面板（组织关系筛选）+ 色块 + 组合构建区
-      Schedule.renderPersonPanel(left, candidates, { groupByTeam: true });
+      // 左：人员面板 + 色块 + 组合构建区（各用独立容器，避免互相清空）
+      const leftPersons = document.createElement('div');
+      const leftColor = document.createElement('div');
+      const leftBundle = document.createElement('div');
+      left.appendChild(leftPersons);
+      left.appendChild(leftColor);
+      left.appendChild(leftBundle);
+
+      Schedule.renderPersonPanel(leftPersons, candidates, { groupByTeam: true });
       const colorBox = document.createElement('div');
-      left.appendChild(colorBox);
+      leftColor.appendChild(colorBox);
       function renderColorBlocks() {
         colorBox.innerHTML = '';
         const usedColors = new Set();
@@ -195,7 +202,7 @@ window.VS3 = (function () {
         });
       }
       renderColorBlocks();
-      Schedule.bundleBuilder(left, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onChanged: () => {} });
+      Schedule.bundleBuilder(leftBundle, { userId: u.id, departmentName: unit.deptName, onBundleDrop: () => {}, onChanged: () => {} });
 
       // 中：网格
       renderGrid(center, unit, teams, days);
