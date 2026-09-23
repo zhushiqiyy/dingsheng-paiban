@@ -121,7 +121,8 @@ window.VS4 = (function () {
       function renderVal(td, p) {
         td.innerHTML = '';
         if (p && p.name) {
-          td.innerHTML = `<span class="cell-name">${esc(p.name)}</span>${p.phone ? `<span class="cell-phone">${esc(p.phone)}</span>` : ''}`;
+          const ph = Utils.phoneText(p);
+          td.innerHTML = `<span class="cell-name">${esc(p.name)}</span>${ph ? `<span class="cell-phone">${esc(ph)}</span>` : ''}`;
           td.classList.add('filled');
         }
       }
@@ -276,7 +277,7 @@ window.VS4 = (function () {
       people.forEach(p => {
         const item = document.createElement('div');
         item.className = 'pp-item';
-        item.innerHTML = `<div class="pp-name">${esc(p.name)}</div><div class="pp-phone">${esc(p.phone)}</div>${p.team ? `<span class="pp-tag">${esc(p.team)}</span>` : ''}`;
+        item.innerHTML = `<div class="pp-name">${esc(p.name)}</div><div class="pp-phone">${esc(Utils.phoneText(p))}</div>${p.team ? `<span class="pp-tag">${esc(p.team)}</span>` : ''}`;
         item.addEventListener('click', () => { onPick(p); overlay.remove(); });
         list.appendChild(item);
       });
