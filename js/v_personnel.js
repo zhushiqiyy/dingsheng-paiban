@@ -3,6 +3,9 @@
  * ============================================================ */
 window.VPersonnel = (function () {
 
+  // 模块级转义函数（供人员管理 + 用户管理共用）
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
   /* ==================== 人员管理 ==================== */
   function render(main) {
     main.innerHTML = '';
@@ -58,9 +61,6 @@ window.VPersonnel = (function () {
       card.querySelector('#p-count').textContent = `共 ${all.length} 人，当前显示 ${filtered.length} 人`;
     }
 
-    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-    window.__esc = esc;
-
     // 搜索
     card.querySelector('#p-search').addEventListener('input', (e) => { filter = e.target.value; refresh(); });
 
@@ -70,7 +70,7 @@ window.VPersonnel = (function () {
     });
 
     // 新增
-    card.querySelector('#p-add').addEventListener('click', () => openPersonEditor(null, refresh));
+    card.querySelector('#p-add').addEventListener('click', () => confirmWithPassword('新增人员', () => openPersonEditor(null, refresh)));
 
     // 导入
     card.querySelector('#p-import').addEventListener('click', () => card.querySelector('#p-file').click());
@@ -88,31 +88,55 @@ window.VPersonnel = (function () {
     card.querySelector('#p-batch').addEventListener('click', () => {
       const ids = selectedIds(card);
       if (ids.length === 0) { alert('请先勾选要修改的人员'); return; }
-      openBatchEditor(ids, refresh);
+      confirmWithPassword('批量修改', () => openBatchEditor(ids, refresh));
     });
 
     // 删除选中
     card.querySelector('#p-del-sel').addEventListener('click', () => {
       const ids = selectedIds(card);
       if (ids.length === 0) { alert('请先勾选要删除的人员'); return; }
-      if (!confirm(`确定删除选中的 ${ids.length} 人？`)) return;
-      ids.forEach(id => Store.removePerson(id));
-      refresh();
+      confirmWithPassword(`删除选中的 ${ids.length} 人`, () => { ids.forEach(id => Store.removePerson(id)); refresh(); });
     });
 
-    // 行内编辑（点击单元格）
+    // 行内编辑（点击单元格 → 密码二次确认 → 编辑）
     card.querySelector('#p-table').addEventListener('click', (e) => {
       const del = e.target.getAttribute('data-del');
-      if (del) { if (confirm('确定删除该人员？')) { Store.removePerson(del); refresh(); } return; }
+      if (del) {
+        confirmWithPassword('删除人员', () => { Store.removePerson(del); refresh(); });
+        return;
+      }
       const td = e.target.closest('.editable');
       if (td) {
         const id = td.closest('tr').querySelector('.p-check').getAttribute('data-id');
         const field = td.getAttribute('data-field');
-        openInlineEdit(td, id, field, refresh);
+        confirmWithPassword('修改人员信息', () => openInlineEdit(td, id, field, refresh));
       }
     });
 
     refresh();
+  }
+
+  /** 密码二次确认（初始密码 admin123，可在账号设置中修改） */
+  function confirmWithPassword(actionLabel, onOk) {
+    const overlay = modal(`
+      <div class="modal-title">二次确认：${actionLabel}</div>
+      <p class="muted" style="margin-bottom:10px">该操作需输入确认密码（初始密码 admin123）。</p>
+      <div class="field"><label>确认密码</label><input id="cf-pw" type="password" placeholder="请输入确认密码"></div>
+      <div id="cf-err" class="auth-err"></div>
+      <div class="modal-actions">
+        <button id="cf-cancel" class="btn">取消</button>
+        <button id="cf-ok" class="btn btn-primary">确认</button>
+      </div>
+    `);
+    overlay.querySelector('#cf-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#cf-ok').addEventListener('click', () => {
+      const pw = overlay.querySelector('#cf-pw').value;
+      const expect = Store.getSettings().editPassword || 'admin123';
+      if (pw === expect) { overlay.remove(); onOk(); }
+      else overlay.querySelector('#cf-err').textContent = '密码错误';
+    });
+    overlay.querySelector('#cf-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') overlay.querySelector('#cf-ok').click(); });
+    overlay.querySelector('#cf-pw').focus();
   }
 
   function selectedIds(card) {
@@ -123,7 +147,7 @@ window.VPersonnel = (function () {
     const p = Store.listPersonnel().find(x => x.id === id);
     if (!p) return;
     const old = p[field] || '';
-    td.innerHTML = `<input type="text" class="inp inline-inp" value="${__esc(old)}">`;
+    td.innerHTML = `<input type="text" class="inp inline-inp" value="${esc(old)}">`;
     const inp = td.querySelector('input');
     inp.focus();
     inp.select();
@@ -140,10 +164,10 @@ window.VPersonnel = (function () {
     const deptSel = App.deptOptions(p ? p.department : '');
     const overlay = modal(`
       <div class="modal-title">${p ? '编辑人员' : '新增人员'}</div>
-      <div class="field"><label>姓名 *</label><input id="pe-name" value="${__esc(p ? p.name : '')}"></div>
-      <div class="field"><label>长号（工作号码）*</label><input id="pe-phone" value="${__esc(p ? p.phone : '')}"></div>
-      <div class="field"><label>短号（集团短号）</label><input id="pe-short" value="${__esc(p ? p.shortPhone : '')}"></div>
-      <div class="field"><label>班组（二级部门）</label><input id="pe-team" value="${__esc(p ? p.team : '')}"></div>
+      <div class="field"><label>姓名 *</label><input id="pe-name" value="${esc(p ? p.name : '')}"></div>
+      <div class="field"><label>长号（工作号码）*</label><input id="pe-phone" value="${esc(p ? p.phone : '')}"></div>
+      <div class="field"><label>短号（集团短号）</label><input id="pe-short" value="${esc(p ? p.shortPhone : '')}"></div>
+      <div class="field"><label>班组（二级部门）</label><input id="pe-team" value="${esc(p ? p.team : '')}"></div>
       <div class="field"><label>部门（一级部门）</label><select id="pe-dept">${deptSel}</select></div>
       <div class="modal-actions">
         <button id="pe-cancel" class="btn">取消</button>
@@ -238,7 +262,7 @@ window.VPersonnel = (function () {
         <div class="modal-title">导入预览（${people.length} 人）</div>
         <div class="table-wrap" style="max-height:320px;overflow:auto">
           <table class="grid-table"><thead><tr><th>姓名</th><th>长号</th><th>短号</th><th>班组(二级部门)</th><th>部门(一级部门)</th></tr></thead>
-          <tbody>${people.slice(0, 100).map(p => `<tr><td>${__esc(p.name)}</td><td>${__esc(p.phone)}</td><td>${__esc(p.shortPhone)}</td><td>${__esc(p.team)}</td><td>${__esc(p.department)}</td></tr>`).join('')}</tbody></table>
+          <tbody>${people.slice(0, 100).map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.phone)}</td><td>${esc(p.shortPhone)}</td><td>${esc(p.team)}</td><td>${esc(p.department)}</td></tr>`).join('')}</tbody></table>
         </div>
         ${people.length > 100 ? '<div class="muted">（仅预览前100条）</div>' : ''}
         <div class="modal-actions">
@@ -298,10 +322,10 @@ window.VPersonnel = (function () {
       const tbody = card.querySelector('#u-tbody');
       tbody.innerHTML = users.map(u => `
         <tr>
-          <td>${__esc(u.username)}</td>
-          <td>${__esc(u.name)}</td>
+          <td>${esc(u.username)}</td>
+          <td>${esc(u.name)}</td>
           <td>${u.role === 'admin' ? '<b>管理员</b>' : '普通用户'}</td>
-          <td>${__esc(u.department)}</td>
+          <td>${esc(u.department)}</td>
           <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</td>
           <td>${u.role === 'admin' ? '<span class="muted">—</span>' : `<button class="btn btn-sm" data-reset="${u.id}">重置密码</button> <button class="btn btn-sm btn-danger" data-del="${u.id}">删除</button>`}</td>
         </tr>
