@@ -52,9 +52,15 @@ window.DutyEditor = (function () {
 
     main.appendChild(wrap);
 
-    /* ---------- 左：人员面板（组织关系筛选 + 搜索） ---------- */
-    const panelCtl = Schedule.renderPersonPanel(left, cfg.candidatePersons || [], {
+    /* ---------- 左：人员面板（组织关系筛选 + 搜索）+ 组合构建区（分两个独立容器，避免互相清空） ---------- */
+    const leftPersons = document.createElement('div');
+    const leftBundle = document.createElement('div');
+    left.appendChild(leftPersons);
+    left.appendChild(leftBundle);
+
+    const panelCtl = Schedule.renderPersonPanel(leftPersons, cfg.candidatePersons || [], {
       groupByTeam: !!cfg.groupByTeam,
+      emptyText: cfg.emptyText || '无匹配人员',
     }, (p) => hintPick(p));
 
     /* ---------- 中：网格 ---------- */
@@ -260,7 +266,7 @@ window.DutyEditor = (function () {
     center.appendChild(signerBox);
 
     /* ---------- 左：组合构建区（拖人进来 → 命名 → 创建，无需弹窗） ---------- */
-    Schedule.bundleBuilder(left, {
+    Schedule.bundleBuilder(leftBundle, {
       userId, departmentName,
       onBundleDrop: (persons) => { /* 点击组合拖拽到表格 */ },
       onChanged: () => {},
