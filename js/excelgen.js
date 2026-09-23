@@ -50,11 +50,13 @@ window.ExcelGen = (function () {
       // 日期行
       for (let d = 1; d <= days; d++) {
         const row = [`${month}月${d}日`];
-        const isAD = Utils.isAllDay(year, month, d);
         for (const t of teams) {
-          const p = (cells[d] && cells[d][t.name]) || null;
-          const ph = p ? Utils.phoneText(p) : '';
-          const txt = p && p.name ? (ph ? `${p.name}\n${ph}` : p.name) : '';
+          const raw = (cells[d] && cells[d][t.name]) || null;
+          const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+          const txt = list.map(p => {
+            const ph = p ? Utils.phoneText(p) : '';
+            return p && p.name ? (ph ? `${p.name} ${ph}` : p.name) : '';
+          }).filter(Boolean).join('\n');
           row.push(txt);
         }
         aoa.push(row);
