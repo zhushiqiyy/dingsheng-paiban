@@ -33,15 +33,21 @@ window.DutyEditor = (function () {
       <button id="ed-submit" class="btn btn-primary">✅ 提交</button>
       <button id="ed-export" class="btn btn-primary">📤 导出 Word</button>
     `;
+    (cfg.extraButtons || []).forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = b.label;
+      btn.addEventListener('click', b.onClick);
+      bar.appendChild(btn);
+    });
     wrap.appendChild(bar);
 
-    // 主体三栏
+    // 主体两栏
     const body = document.createElement('div');
     body.className = 'editor-body';
     const left = document.createElement('div'); left.className = 'editor-left';
     const center = document.createElement('div'); center.className = 'editor-center';
-    const right = document.createElement('div'); right.className = 'editor-right-side';
-    body.appendChild(left); body.appendChild(center); body.appendChild(right);
+    body.appendChild(left); body.appendChild(center);
     wrap.appendChild(body);
 
     main.appendChild(wrap);
@@ -110,23 +116,37 @@ window.DutyEditor = (function () {
       return td;
     }
 
+    const maxPerCell = cfg.maxPerCell || 1;
+    // 归一化某日排班为数组
+    function normAssign(p) {
+      if (!p) return [];
+      if (Array.isArray(p)) return p.filter(x => x && x.name);
+      return p.name ? [p] : [];
+    }
+    function setDay(day, list) {
+      list = list.filter(x => x && x.name);
+      if (list.length === 0) { delete data.assignments[day]; return; }
+      data.assignments[day] = (maxPerCell === 1) ? list[0] : list;
+    }
     function assignPerson(day, p) {
-      if (p && p.name) data.assignments[day] = { name: p.name, phone: p.phone, shortPhone: p.shortPhone };
-      else delete data.assignments[day];
+      const list = normAssign(data.assignments[day]);
+      if (p && p.name) {
+        if (list.length >= maxPerCell) { list[list.length - 1] = p; } else list.push(p);
+      }
+      setDay(day, list);
     }
 
     function makePersonCell(day) {
       const td = document.createElement('td');
       td.className = 'dt-person';
       td.tabIndex = 0;
-      renderPersonContent(td, data.assignments[day]);
+      const isHoliday = Utils.isHoliday(data.year, data.month, day);
+      renderPersonContent(td, normAssign(data.assignments[day]));
       Schedule.makeDroppable(td, {
         onDrop: (payload) => {
           if (payload && payload.bundle) {
             // 组合：从当前日期开始连续填充
-            payload.persons.forEach((p, idx) => {
-              if (day + idx <= days) assignPerson(day + idx, p);
-            });
+            payload.persons.forEach((p, idx) => { if (day + idx <= days) assignPerson(day + idx, p); });
             recordCo();
           } else if (payload && payload.name) {
             assignPerson(day, payload);
@@ -135,12 +155,12 @@ window.DutyEditor = (function () {
           cfg.onSave({ assignments: { ...data.assignments } });
           renderGrid();
         },
-        onClear: () => { delete data.assignments[day]; cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, null); },
+        onClear: () => { setDay(day, []); cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, []); },
       });
       // 拖动已填格（移动/复制）
       td.addEventListener('dragstart', (e) => {
-        const p = data.assignments[day];
-        if (p && p.name) { e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/plain', JSON.stringify(p)); }
+        const list = normAssign(data.assignments[day]);
+        if (list.length) { e.dataTransfer.effectAllowed = 'copyMove'; e.dataTransfer.setData('text/plain', JSON.stringify(list)); }
       });
       // 点击选中
       td.addEventListener('click', () => {
@@ -149,22 +169,27 @@ window.DutyEditor = (function () {
       });
       // 复制/剪切/粘贴
       td.addEventListener('keydown', (e) => {
-        const p = data.assignments[day];
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (p && p.name) clipboard = { ...p }; }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'x') { if (p && p.name) { clipboard = { ...p }; delete data.assignments[day]; cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, null); } }
-        if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (clipboard) { assignPerson(day, clipboard); cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, clipboard); } }
-        if (e.key === 'Delete' || e.key === 'Backspace') { if (p && p.name) { delete data.assignments[day]; cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, null); } }
+        const list = normAssign(data.assignments[day]);
+        if ((e.ctrlKey || e.metaKey) && e.key === 'c') { if (list.length) clipboard = list.map(x => ({ ...x })); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'x') { if (list.length) { clipboard = list.map(x => ({ ...x })); setDay(day, []); cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, []); } }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (clipboard && clipboard.length) { setDay(day, normAssign(data.assignments[day]).concat(clipboard).slice(0, maxPerCell)); cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, normAssign(data.assignments[day])); } }
+        if (e.key === 'Delete' || e.key === 'Backspace') { if (list.length) { list.pop(); setDay(day, list); cfg.onSave({ assignments: { ...data.assignments } }); renderPersonContent(td, list); } }
       });
       return td;
     }
 
-    function renderPersonContent(td, p) {
+    function renderPersonContent(td, list) {
       td.innerHTML = '';
-      if (p && p.name) {
-        const n = document.createElement('div'); n.className = 'cell-name'; n.textContent = p.name;
-        const ph = Utils.phoneText(p);
-        td.appendChild(n);
-        if (ph) { const d = document.createElement('div'); d.className = 'cell-phone'; d.textContent = ph; td.appendChild(d); }
+      if (list && list.length) {
+        list.forEach(p => {
+          const wrap = document.createElement('div');
+          wrap.className = 'cell-person';
+          const n = document.createElement('span'); n.className = 'cell-name'; n.textContent = p.name;
+          const ph = Utils.phoneText(p);
+          wrap.appendChild(n);
+          if (ph) { const s = document.createElement('span'); s.className = 'cell-phone'; s.textContent = ph; wrap.appendChild(s); }
+          td.appendChild(wrap);
+        });
         td.classList.add('filled');
         td.draggable = true;
       } else {
@@ -234,15 +259,12 @@ window.DutyEditor = (function () {
     });
     center.appendChild(signerBox);
 
-    /* ---------- 右：功能栏（组合拖入 + 智能记忆） ---------- */
-    Schedule.bundlePanel(right, {
+    /* ---------- 左：组合构建区（拖人进来 → 命名 → 创建，无需弹窗） ---------- */
+    Schedule.bundleBuilder(left, {
       userId, departmentName,
-      onBundleDrop: (persons) => { /* 点击组合：提示拖拽 */ },
-      onManage: () => Schedule.bundleEditor(userId, departmentName, () => refreshBundlePanel()),
+      onBundleDrop: (persons) => { /* 点击组合拖拽到表格 */ },
+      onChanged: () => {},
     });
-    function refreshBundlePanel() {
-      Schedule.bundlePanel(right, { userId, departmentName, onBundleDrop: () => {}, onManage: () => Schedule.bundleEditor(userId, departmentName, refreshBundlePanel) });
-    }
 
     /* ---------- 保存/提交/导出 ---------- */
     function updateState() {
