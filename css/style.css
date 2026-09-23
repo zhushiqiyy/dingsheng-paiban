@@ -182,6 +182,18 @@ html, body {
 .bundle-item { cursor: grab; }
 .bundle-item .pp-name { color: var(--primary); }
 
+/* ---------- 组合构建区（左侧内联） ---------- */
+.bundle-builder { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; margin-top: 12px; }
+.bb-drop { border: 2px dashed #c9d2e0; border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); font-size: 12px; margin-bottom: 8px; background: #fafbfd; }
+.bb-drop.drop-target { border-color: var(--primary); background: #eaf1ff; color: var(--primary); }
+.bb-pending { display: flex; flex-wrap: wrap; gap: 6px; min-height: 22px; margin-bottom: 8px; }
+.bb-namerow { display: flex; gap: 6px; margin-bottom: 8px; }
+.bb-namerow .inp { flex: 1; }
+.bb-list { max-height: 220px; overflow: auto; }
+.bb-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.bb-row .bundle-item { flex: 1; margin-bottom: 0; }
+.bb-del { cursor: pointer; color: var(--danger); font-weight: 700; padding: 4px; }
+
 /* ---------- 组合编辑 ---------- */
 .be-body { border: 1px solid var(--border); border-radius: 8px; padding: 6px; max-height: 420px; overflow: auto; }
 .be-selected { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border-bottom: 1px dashed var(--border); margin-bottom: 6px; min-height: 30px; }
@@ -229,8 +241,9 @@ html, body {
 .s3-date-head, .s3-team-head { background: #f2f5fa; }
 .s3-team-name { font-weight: 600; font-size: 12px; }
 .s3-team-phone { font-size: 11px; color: var(--muted); }
-.s3-date { background: #fafbfd; font-weight: 600; white-space: nowrap; min-width: 64px; }
+.s3-date { background: #fafbfd; font-weight: 600; white-space: nowrap; min-width: 64px; position: sticky; left: 0; z-index: 2; }
 .s3-date.is-allday { background: var(--yellow); }
+.s3-date-head { position: sticky; left: 0; z-index: 3; background: #f2f5fa; }
 .s3-cell { min-width: 96px; min-height: 30px; cursor: pointer; }
 .s3-cell.filled { background: #eef6ff; }
 .s3-cell.selected { outline: 2px solid var(--primary); }
@@ -285,6 +298,15 @@ html, body {
 .eg-name { font-weight: 600; font-size: 13px; min-width: 60px; }
 .eg-phone { font-size: 12px; color: var(--muted); }
 .eg-tag { font-size: 11px; color: var(--primary); background: #eaf1ff; padding: 1px 6px; border-radius: 4px; margin-left: auto; }
+
+/* ---------- 色块填充 ---------- */
+.palette-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; padding: 8px; background: #fff; border-radius: 8px; box-shadow: var(--shadow); }
+.palette-swatch { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; }
+.palette-swatch:hover { transform: scale(1.15); }
+.color-block { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 13px; font-weight: 600; border: 1px solid #ccc; text-align: center; }
+.color-block.drop-target { outline: 3px solid var(--primary); }
+.s3-cell.color-sel { outline: 3px solid var(--primary); }
+.btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
 @media (max-width: 1100px) {
   .editor-body, .s3-body { flex-direction: column; }
