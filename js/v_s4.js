@@ -192,14 +192,19 @@ window.VS4 = (function () {
       dates.forEach(dt => o[dayKey(dt)] = { day: {}, night: {} });
       return o;
     }
-    // 一级值班 -> 全天（白天+晚上同人）
+    // 一级值班 -> 全天（白天+晚上同人，可能多人）
     function fillS1() {
       const o = emptyDays();
       const s1 = Store.getS1();
       if (s1) {
         dates.forEach(dt => {
-          const p = s1.assignments && s1.assignments[dt.d];
-          if (p && p.name) o[dayKey(dt)] = { day: { name: p.name, phone: p.phone }, night: { name: p.name, phone: p.phone } };
+          const raw = s1.assignments && s1.assignments[dt.d];
+          const list = Array.isArray(raw) ? raw : (raw && raw.name ? [raw] : []);
+          if (list.length) {
+            const name = list.map(p => p.name).join('、');
+            const phone = list.map(p => Utils.phoneText(p)).filter(Boolean).join('、');
+            o[dayKey(dt)] = { day: { name, phone }, night: { name, phone } };
+          }
         });
       }
       return o;
