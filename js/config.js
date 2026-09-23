@@ -101,10 +101,36 @@ window.CONFIG = (function () {
     },
   };
 
+  /* ---------- 通讯录 一级部门 → 项目部 映射 ---------- */
+  // 副本人员通讯录.xlsx 的「一级部门」字段 → 系统内部部门名
+  const DEPT_ALIAS = {
+    '鱼山项目一部': '项目一部',
+    '鱼山项目二部': '项目二部',
+    '鱼山项目三部': '项目三部',
+    '鱼山项目四部': '项目四部',
+    '鱼山项目五部': '项目五部',
+    '综合维修部': '综合维修部',
+    '清洗部': '清洗部',
+    '宁波项目经理部': '宁波项目经理部',
+    '建安部': '建安部',
+  };
+
+  /** 把通讯录的一级部门（+二级部门）映射为系统部门名 */
+  function mapDepartment(d1, d2) {
+    d1 = String(d1 || '').trim();
+    d2 = String(d2 || '').trim();
+    if (DEPT_ALIAS[d1]) return DEPT_ALIAS[d1];
+    // 阀门维修部 在「各合作伙伴」一级部门下
+    if (d2.includes('阀门')) return '阀门维修部';
+    // 公司级部门等原样保留（公司领导/财务部/综合管理部/质量技术部/项目管理部/生产管理部/安全环保部/各合作伙伴/金塘项目部）
+    return d1;
+  }
+
   /* ---------- 通用 ---------- */
   const WEEK_CN = ['日', '一', '二', '三', '四', '五', '六'];
 
   return {
     COMPANY, DEPARTMENTS, COMPANY_LEVEL, SCHEDULE1_DEFAULTS, HOLIDAYS, WEEK_CN,
+    DEPT_ALIAS, mapDepartment,
   };
 })();
