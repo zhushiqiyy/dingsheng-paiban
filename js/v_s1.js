@@ -36,8 +36,8 @@ window.VS1 = (function () {
     const now = new Date();
     s1.publishDate = s1.publishDate || Utils.fmtDateCN(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-    // 候选人 = 全部人员
-    const candidates = Store.listPersonnel();
+    // 候选人 = 管理员维护的干部/领导名单
+    const candidates = Store.leaderPersons();
 
     DutyEditor.render(main, {
       year: s1.year, month: s1.month,
@@ -45,10 +45,14 @@ window.VS1 = (function () {
       signers: { maker: s1.maker, reviewer: s1.reviewer, approver: s1.approver },
       candidatePersons: candidates,
       groupByTeam: false,
+      maxPerCell: 2,
       userId: (App.currentUser() && App.currentUser().id),
       departmentName: '',
       titleSuffix: '干部值班表',
       personHeader: '值班人及其手机号',
+      extraButtons: [
+        { label: '⚙ 管理候选人员', onClick: () => leaderManager(() => render(main)) },
+      ],
       signerFields: [
         { key: 'maker', label: '制表：', defaultValue: CONFIG.SCHEDULE1_DEFAULTS.maker },
         { key: 'reviewer', label: '审核：', defaultValue: CONFIG.SCHEDULE1_DEFAULTS.reviewer },
@@ -70,7 +74,6 @@ window.VS1 = (function () {
       },
       onYearMonthChange(y, m) {
         s1.year = y; s1.month = m;
-        // 切换月份时保留签字人，清空或保留排班？保留同一月份数据更好 —— 这里按新月份清空排班
         s1.assignments = {}; s1.tags = {};
         Store.setS1(s1);
         render(main);
@@ -84,6 +87,48 @@ window.VS1 = (function () {
         });
         WordGen.download(doc, `${CONFIG.COMPANY.shortName}${s1.year}年${s1.month}月份干部值班表.docx`);
       },
+    });
+  }
+
+  /** 一级候选人员管理（管理员从全部人员中勾选干部/领导） */
+  function leaderManager(onChanged) {
+    const all = Store.listPersonnel();
+    const selected = new Set(Store.getLeaderIds());
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="width:680px">
+      <div class="modal-title">一级值班候选人员（干部/领导）</div>
+      <p class="muted" style="margin-bottom:8px">从已导入名单中勾选可参与一级值班的人员（可跨部门）。</p>
+      <input id="lm-search" class="inp" placeholder="搜索 姓名/拼音/电话…" style="width:100%;margin-bottom:6px">
+      <div class="eg-body" id="lm-body"></div>
+      <div class="modal-actions">
+        <button id="lm-cancel" class="btn">取消</button>
+        <button id="lm-save" class="btn btn-primary">保存（已选 ${selected.size} 人）</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    function renderList(q) {
+      const box = overlay.querySelector('#lm-body');
+      box.innerHTML = '';
+      all.filter(p => Utils.matchPerson(q, p)).slice(0, 500).forEach(p => {
+        const lb = document.createElement('label');
+        lb.className = 'eg-item';
+        lb.innerHTML = `<input type="checkbox" value="${p.id}" ${selected.has(p.id) ? 'checked' : ''}> <span class="eg-name">${esc(p.name)}</span><span class="eg-phone">${esc(Utils.phoneText(p))}</span><span class="eg-tag">${esc(p.department)}</span>`;
+        box.appendChild(lb);
+      });
+    }
+    renderList('');
+    overlay.querySelector('#lm-search').addEventListener('input', (e) => renderList(e.target.value));
+    overlay.querySelector('#lm-body').addEventListener('change', (e) => {
+      const cb = e.target;
+      if (cb.type === 'checkbox') { if (cb.checked) selected.add(cb.value); else selected.delete(cb.value); overlay.querySelector('#lm-save').textContent = `保存（已选 ${selected.size} 人）`; }
+    });
+    overlay.querySelector('#lm-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#lm-save').addEventListener('click', () => {
+      Store.setLeaderIds(Array.from(selected));
+      overlay.remove();
+      if (onChanged) onChanged();
     });
   }
 
