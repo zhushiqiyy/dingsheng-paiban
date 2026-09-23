@@ -96,12 +96,16 @@ window.VS2 = (function () {
         signers: { approver: s2.approver, maker: s2.maker },
         candidatePersons: candidates,
         groupByTeam: true,
+        userId: u.id,
+        departmentName: dept.name,
         titleSuffix: '值班表',
         personHeader: '值班人',
         signerFields: [
           { key: 'approver', label: '审批：', defaultValue: dept.approver },
           { key: 'maker', label: '制表：', defaultValue: dept.maker },
         ],
+        getSubmit: () => Store.getSubmit('s2', dept.id),
+        onSubmit: () => Store.setSubmit('s2', dept.id, true),
         onSave(patch) {
           if (patch.assignments) s2.assignments = patch.assignments;
           if (patch.tags) s2.tags = patch.tags;
