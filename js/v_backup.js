@@ -43,7 +43,7 @@ window.VBackup = (function () {
     });
 
     card.querySelector('#bk-download-personnel').addEventListener('click', () => {
-      const aoa = [['姓名', '联系电话', '班组', '部门']];
+      const aoa = [['姓名', '工作号码', '集团短号', '班组', '部门']];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '人员信息');
       XLSX.writeFile(wb, '人员导入模板.xlsx');
