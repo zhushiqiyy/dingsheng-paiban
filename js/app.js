@@ -195,7 +195,10 @@ window.App = (function () {
 
     // 事件
     topbar.querySelector('#btn-logout').addEventListener('click', () => {
-      if (confirm('确定退出登录？')) { Store.logout(); renderRoot(); }
+      // 登出为无损操作（数据均在本地），直接退出，避免 confirm 在 iframe 预览环境被拦截
+      Store.logout();
+      _current = 'dashboard';
+      renderRoot();
     });
     topbar.querySelector('#btn-account').addEventListener('click', () => navigate('account'));
 
