@@ -158,7 +158,8 @@ window.VS3 = (function () {
       td.innerHTML = '';
       if (p && p.name) {
         const n = document.createElement('div'); n.className = 'cell-name'; n.textContent = p.name;
-        if (p.phone) { const ph = document.createElement('div'); ph.className = 'cell-phone'; ph.textContent = p.phone; td.appendChild(ph); }
+        const ph = Utils.phoneText(p);
+        if (ph) { const el = document.createElement('div'); el.className = 'cell-phone'; el.textContent = ph; td.appendChild(el); }
         td.appendChild(n);
         td.classList.add('filled');
         td.draggable = true;
