@@ -20,6 +20,8 @@ window.VS2 = (function () {
       main.innerHTML = '<div class="card"><div class="muted">你的账号未绑定有效部门，请联系管理员。</div></div>';
       return;
     }
+    // 当前选中编组（普通用户可自定义备选人员栏）
+    let groupId = window.__s2_group || 'all';
 
     function renderDept() {
       window.__s2_dept = dept;
@@ -40,19 +42,30 @@ window.VS2 = (function () {
       const now = new Date();
       s2.publishDate = s2.publishDate || Utils.fmtDateCN(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-      // 候选人 = 本部门人员
-      const candidates = Store.listPersonnel().filter(p => p.department === dept.name);
+      // 候选人：默认全部本部门人员，或选中编组的成员
+      const allCandidates = Store.listPersonnel().filter(p => p.department === dept.name);
+      const myGroups = Store.listGroups(u.id);
+      let candidates = allCandidates;
+      if (groupId !== 'all') {
+        const g = myGroups.find(x => x.id === groupId);
+        if (g) candidates = Store.groupPersons(u.id, groupId);
+      }
 
       // 主容器
       main.innerHTML = '';
       const deptBar = document.createElement('div');
       deptBar.className = 'dept-bar';
+      // 编组选择（管理员与普通用户都可用）
+      const groupOpts = `<option value="all">全部人员（${allCandidates.length}人）</option>` +
+        myGroups.map(g => `<option value="${g.id}" ${g.id === groupId ? 'selected' : ''}>${esc(g.name)}（${(g.personIds || []).length}人）</option>`).join('');
+      const groupUI = `<label>备选栏 <select id="s2-group">${groupOpts}</select></label>
+        <button id="s2-groups" class="btn">🔧 编组管理</button>`;
       if (admin) {
         let tabs = '';
         CONFIG.DEPARTMENTS.forEach(d => {
           tabs += `<button class="dept-tab ${d.id === dept.id ? 'active' : ''}" data-dept="${d.id}">${d.short || d.name}</button>`;
         });
-        deptBar.innerHTML = `<div class="dept-tabs">${tabs}</div>
+        deptBar.innerHTML = `<div class="dept-tabs">${tabs}</div>${groupUI}<span class="spacer"></span>
           <button id="s2-export-all" class="btn btn-primary">📤 导出全部 9 部门汇总</button>`;
         main.appendChild(deptBar);
         deptBar.querySelectorAll('.dept-tab').forEach(t => t.addEventListener('click', () => {
@@ -61,9 +74,18 @@ window.VS2 = (function () {
         }));
         deptBar.querySelector('#s2-export-all').addEventListener('click', exportAll);
       } else {
-        deptBar.innerHTML = `<div class="dept-title">${dept.name} 二级值班表</div>`;
+        deptBar.innerHTML = `<div class="dept-title">${dept.name} 二级值班表</div>${groupUI}`;
         main.appendChild(deptBar);
       }
+      // 编组事件
+      deptBar.querySelector('#s2-group').addEventListener('change', (e) => {
+        groupId = e.target.value;
+        window.__s2_group = groupId;
+        renderDept();
+      });
+      deptBar.querySelector('#s2-groups').addEventListener('click', () => {
+        Schedule.groupManager(u.id, dept.name, () => renderDept());
+      });
 
       const body = document.createElement('div');
       main.appendChild(body);
@@ -116,6 +138,8 @@ window.VS2 = (function () {
 
     renderDept();
   }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   return { render };
 })();
