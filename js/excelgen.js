@@ -53,7 +53,8 @@ window.ExcelGen = (function () {
         const isAD = Utils.isAllDay(year, month, d);
         for (const t of teams) {
           const p = (cells[d] && cells[d][t.name]) || null;
-          const txt = p && p.name ? (p.phone ? `${p.name}\n${p.phone}` : p.name) : '';
+          const ph = p ? Utils.phoneText(p) : '';
+          const txt = p && p.name ? (ph ? `${p.name}\n${ph}` : p.name) : '';
           row.push(txt);
         }
         aoa.push(row);
