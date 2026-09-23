@@ -145,9 +145,9 @@ window.DutyEditor = (function () {
       td.innerHTML = '';
       if (p && p.name) {
         const n = document.createElement('div'); n.className = 'cell-name'; n.textContent = p.name;
-        const ph = document.createElement('div'); ph.className = 'cell-phone'; ph.textContent = p.phone || '';
+        const ph = document.createElement('div'); ph.className = 'cell-phone'; ph.textContent = Utils.phoneText(p);
         td.appendChild(n);
-        if (p.phone) td.appendChild(ph);
+        if (ph.textContent) td.appendChild(ph);
       } else {
         td.innerHTML = '<span class="cell-placeholder">拖入人员</span>';
       }
