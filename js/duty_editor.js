@@ -138,6 +138,7 @@ window.DutyEditor = (function () {
       const list = normAssign(data.assignments[day]);
       if (p && p.name) {
         if (list.length >= maxPerCell) { list[list.length - 1] = p; } else list.push(p);
+        Store.recordUseCount(p.id);
       }
       setDay(day, list);
     }
