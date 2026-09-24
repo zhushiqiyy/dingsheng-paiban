@@ -10,5 +10,23 @@
   App.register('s4', { title: '节假日值班', adminOnly: false, render: VS4.render });
   App.register('backup', { title: '数据备份', adminOnly: true, render: VBackup.render });
 
-  document.addEventListener('DOMContentLoaded', () => App.init());
+  document.addEventListener('DOMContentLoaded', () => {
+    App.init();
+    // 云同步：检查连接状态，若已连接则自动从云端拉取数据（保留本地登录态）
+    if (window.CloudSync && CloudSync.isAvailable()) {
+      CloudSync.refreshState().then((enabled) => {
+        if (!enabled) return;
+        CloudSync.download().then((res) => {
+          if (res.ok && res.data) {
+            const data = res.data;
+            // 登录态（session）不跨设备同步，保留本地
+            const localSession = (Store.get() && Store.get().session) || { userId: null };
+            data.session = localSession;
+            Store.loadFromCloud(data);
+            App.renderRoot();
+          }
+        });
+      });
+    }
+  });
 })();
