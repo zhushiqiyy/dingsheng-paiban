@@ -383,6 +383,13 @@ window.VS3 = (function () {
               if (list.length < MAX_CELL && !list.some(x => personKey(x) === personKey(p))) { list.push(p); Store.recordUseCount(p.id); }
             });
             setList(list);
+          } else if (Array.isArray(payload) && payload.length) {
+            // 拖动已填格（多人）复制到本格
+            const list = getList();
+            payload.forEach(p => {
+              if (p && p.name && list.length < MAX_CELL && !list.some(x => personKey(x) === personKey(p))) { list.push(p); Store.recordUseCount(p.id); }
+            });
+            setList(list);
           } else if (payload && payload.name) {
             addPerson(payload);
           }
