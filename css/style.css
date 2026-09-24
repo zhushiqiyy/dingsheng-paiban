@@ -202,7 +202,7 @@ html, body {
 .be-list { max-height: 300px; overflow: auto; }
 
 /* ---------- 单元格多人 ---------- */
-.cell-person { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cell-person { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .cell-person .cell-name { white-space: nowrap; }
 
 /* ---------- 值班表网格（2列） ---------- */
