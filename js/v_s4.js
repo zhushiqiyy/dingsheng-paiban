@@ -14,6 +14,7 @@ window.VS4 = (function () {
     bar.innerHTML = `
       <label>年份 <select id="s4-year">${yearOptions()}</select></label>
       <label>节假日 <select id="s4-holiday"></select></label>
+      <button id="s4-refresh" class="btn">🔄 刷新万年历</button>
       <button id="s4-gen" class="btn btn-primary">🔁 自动填充生成</button>
       <span class="spacer"></span>
       <button id="s4-export" class="btn btn-primary">📤 导出 Excel</button>
@@ -23,10 +24,10 @@ window.VS4 = (function () {
     const holidaySel = bar.querySelector('#s4-holiday');
     function loadHolidays() {
       const year = +bar.querySelector('#s4-year').value;
-      const h = CONFIG.HOLIDAYS[year];
+      const h = Store.getHolidayData(year);
       holidaySel.innerHTML = '';
       if (!h || !h.holidays.length) {
-        holidaySel.innerHTML = '<option value="">该年份无节假日数据</option>';
+        holidaySel.innerHTML = '<option value="">该年份无节假日数据（点「刷新万年历」获取）</option>';
         return;
       }
       h.holidays.forEach(x => {
@@ -35,6 +36,27 @@ window.VS4 = (function () {
     }
     loadHolidays();
     bar.querySelector('#s4-year').addEventListener('change', () => { loadHolidays(); loadOrGen(); });
+
+    // 刷新万年历：从在线节假日数据源拉取并更新
+    const refreshBtn = bar.querySelector('#s4-refresh');
+    refreshBtn.addEventListener('click', async () => {
+      const year = +bar.querySelector('#s4-year').value;
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = '⏳ 获取中…';
+      try {
+        const apiData = await fetchHolidayFromApi(year);
+        const data = parseHolidayFromApi(year, apiData);
+        if (!data.holidays.length) { alert(`未获取到 ${year} 年节假日数据`); return; }
+        Store.setHolidayData(year, data);
+        loadHolidays();
+        alert(`已更新 ${year} 年节假日（${data.holidays.length} 个假期、${data.makeupWorkdays.length} 个补班日）`);
+      } catch (err) {
+        alert('获取万年历节假日失败：' + (err && err.message ? err.message : '网络错误，请检查网络后重试'));
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '🔄 刷新万年历';
+      }
+    });
 
     let s4 = Store.getS4();
 
@@ -169,7 +191,7 @@ window.VS4 = (function () {
 
   /* ---------- 生成逻辑 ---------- */
   function generate(year, holidayName) {
-    const h = CONFIG.HOLIDAYS[year];
+    const h = Store.getHolidayData(year);
     const holiday = h && h.holidays.find(x => x.name === holidayName);
     if (!holiday) return null;
 
@@ -263,6 +285,65 @@ window.VS4 = (function () {
     });
 
     return { year, holidayName, dates, sheets };
+  }
+
+  /* ---------- 万年历：在线获取 + 解析 ---------- */
+  /** 从在线节假日数据源（timor.tech）获取某年法定节假日 */
+  async function fetchHolidayFromApi(year) {
+    const url = 'https://timor.tech/api/holiday/year/' + year;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json && json.code !== 0) throw new Error('接口返回错误 code=' + json.code);
+    return json;
+  }
+
+  /** 把 timor.tech 返回的数据解析为系统格式 {holidays:[{name,start,end}], makeupWorkdays:[[m,d]]} */
+  function parseHolidayFromApi(year, apiData) {
+    const hol = (apiData && apiData.holiday) || {};
+    const holidayDays = [];
+    const makeup = [];
+    for (const k in hol) {
+      const v = hol[k];
+      if (!v || !v.date) continue;
+      const m = +v.date.slice(5, 7), d = +v.date.slice(8, 10);
+      if (v.holiday) {
+        holidayDays.push({ m, d, name: v.name || '' });
+      } else if ('after' in v || (v.name && v.name.indexOf('补班') >= 0)) {
+        makeup.push([m, d]);
+      }
+    }
+    holidayDays.sort((a, b) => a.m - b.m || a.d - b.d);
+    makeup.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+    // 按日期连续性分段，每段为一个假期
+    const holidays = [];
+    let seg = null;
+    const dimOf = (mm) => Utils.daysInMonth(year, mm);
+    const nextDay = (mm, dd) => { let nd = dd + 1, nm = mm; if (nd > dimOf(mm)) { nd = 1; nm = mm + 1; } return [nm, nd]; };
+    const isConsecutive = (a, b) => { const [nm, nd] = nextDay(a.m, a.d); return nm === b.m && nd === b.d; };
+    for (const day of holidayDays) {
+      if (!seg) {
+        seg = { names: [day.name], start: [day.m, day.d], last: day };
+      } else if (isConsecutive(seg.last, day)) {
+        seg.names.push(day.name);
+        seg.last = day;
+      } else {
+        holidays.push({ name: pickHolidayName(seg.names), start: seg.start, end: [seg.last.m, seg.last.d] });
+        seg = { names: [day.name], start: [day.m, day.d], last: day };
+      }
+    }
+    if (seg) holidays.push({ name: pickHolidayName(seg.names), start: seg.start, end: [seg.last.m, seg.last.d] });
+
+    return { holidays, makeupWorkdays: makeup };
+  }
+
+  /** 从一段连续假期的日期名中挑选节日名：优先含「节」字的名字，否则取第一个非「初X/除夕」 */
+  function pickHolidayName(names) {
+    const jie = names.find(n => n && n.indexOf('节') >= 0);
+    if (jie) return jie;
+    const other = names.find(n => n && !/^初|^除夕|^腊|^正/.test(n));
+    return other || names[0] || '节假日';
   }
 
   /* ---------- 人员选择弹窗 ---------- */
