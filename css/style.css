@@ -305,8 +305,28 @@ html, body {
 .palette-swatch:hover { transform: scale(1.15); }
 .color-block { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 13px; font-weight: 600; border: 1px solid #ccc; text-align: center; }
 .color-block.drop-target { outline: 3px solid var(--primary); }
+.color-block-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.color-block-list { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+.color-block-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,.8); border-radius: 4px; padding: 1px 6px; font-size: 12px; font-weight: 500; }
+.color-block-chip b { cursor: pointer; color: var(--danger); font-weight: 700; padding: 0 2px; }
+.color-block-chip b:hover { background: rgba(0,0,0,.1); border-radius: 2px; }
+.color-block-hint { font-size: 11px; color: #6b7280; font-weight: 400; }
 .s3-cell.color-sel { outline: 3px solid var(--primary); }
+.s3-cell.box-hover { outline: 3px solid #7fb3ff; background: #eaf1ff !important; }
 .btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* ---------- 班组列显隐 ---------- */
+.col-toggle-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.col-toggle-actions .btn { flex: 1; padding: 4px 8px; font-size: 12px; }
+.col-toggle-list { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.col-toggle-item { padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; background: #f2f5fa; border: 1px solid transparent; color: #6b7280; user-select: none; }
+.col-toggle-item.on { background: #eaf1ff; border-color: #bcd4ff; color: var(--primary); font-weight: 600; }
+.col-toggle-item:hover { border-color: var(--primary); }
+
+/* ---------- 导入预览 ---------- */
+.import-summary { display: flex; flex-direction: column; gap: 4px; background: #f7f9fc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.import-summary b { font-size: 14px; }
+.import-note { font-size: 12px; color: #6b7280; line-height: 1.6; margin-top: 8px; padding: 8px 10px; background: #fffbea; border: 1px solid #f0e2b0; border-radius: 6px; }
 
 @media (max-width: 1100px) {
   .editor-body, .s3-body { flex-direction: column; }
