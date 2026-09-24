@@ -24,6 +24,7 @@ window.Store = (function () {
       bundles: {},          // 组合/捆绑：{ userId: [ {id, name, personIds:[]（有序）} ] }
       coMemory: {},         // 相邻人员共现记忆：{ "personId|personId": count }
       useCounts: {},        // 人员使用频次（被拖入排班的次数）：{ personId: count }
+      holidayData: {},      // 从万年历刷新来的节假日数据：{ year: {holidays:[{name,start,end}], makeupWorkdays:[[m,d]]} }
       settings: { editPassword: 'admin123' },  // 人员编辑二次确认密码
       submit: {},           // 提交状态：{ s1:{submitted,at}, s2:{deptId:{...}}, s3:{...}, s4:{...} }
       // 排班数据
@@ -287,6 +288,22 @@ window.Store = (function () {
     const d = load();
     return (d.useCounts || {})[personId] || 0;
   }
+
+  /* ---------- 节假日数据（万年历刷新） ---------- */
+  /** 取某年节假日数据：优先用刷新过的自定义数据，否则用 CONFIG 内置 */
+  function getHolidayData(year) {
+    const d = load();
+    const custom = (d.holidayData || {})[year];
+    if (custom && custom.holidays && custom.holidays.length) return custom;
+    return CONFIG.HOLIDAYS[year] || { holidays: [], makeupWorkdays: [] };
+  }
+  /** 保存某年从万年历刷新来的节假日数据 */
+  function setHolidayData(year, data) {
+    const d = load();
+    d.holidayData = d.holidayData || {};
+    d.holidayData[year] = data;
+    save();
+  }
   /** 根据共现记忆，返回频繁组合的建议（top N 对） */
   function suggestBundles(userId, departmentName, topN) {
     const d = load();
@@ -426,6 +443,7 @@ window.Store = (function () {
     listBundles, addBundle, updateBundle, removeBundle, bundlePersons,
     recordCoMemory, suggestBundles,
     recordUseCount, useCountOf,
+    getHolidayData, setHolidayData,
     getSettings, updateSettings,
     getLeaderIds, setLeaderIds, leaderPersons,
     getSubmit, setSubmit,
