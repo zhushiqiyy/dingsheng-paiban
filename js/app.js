@@ -61,16 +61,9 @@ window.App = (function () {
       <button id="login-btn" class="btn btn-primary btn-block">登 录</button>
       <div class="auth-links">
         <a id="go-register" href="javascript:;">注册普通用户</a>
-        <span class="dot">·</span>
-        <a id="show-hint" href="javascript:;">首次使用？</a>
       </div>
     `;
     card.appendChild(form);
-
-    const hint = document.createElement('div');
-    hint.className = 'auth-hint hidden';
-    hint.innerHTML = `默认管理员账号：<b>admin</b>　密码：<b>admin123</b>（登录后请尽快修改）`;
-    card.appendChild(hint);
 
     wrap.appendChild(card);
 
@@ -90,7 +83,6 @@ window.App = (function () {
       document.getElementById('login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
       document.getElementById('login-user').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
       document.getElementById('go-register').addEventListener('click', () => { showRegister(card); });
-      document.getElementById('show-hint').addEventListener('click', () => hint.classList.toggle('hidden'));
     }, 0);
 
     return wrap;
