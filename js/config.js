@@ -129,8 +129,16 @@ window.CONFIG = (function () {
   /* ---------- 通用 ---------- */
   const WEEK_CN = ['日', '一', '二', '三', '四', '五', '六'];
 
+  /* ---------- 云服务配置（数据跨设备共享） ---------- */
+  // 团队主账号模式：用一个邮箱账号做底层授权，应用内保留用户名登录，全部数据存云端 team_state 表
+  const CLOUD = {
+    endpoint: 'https://ds-paiban.app.workbuddy.host',
+    publishableKey: 'wbpk_NBJCqdwhdlJ6Vd4EmwOeI5_A6TrtPnpF5LDnUnmK57j3OWBVw1rz32K',
+    stateKey: 'main',   // 团队共享数据的固定 key（单团队单记录）
+  };
+
   return {
     COMPANY, DEPARTMENTS, COMPANY_LEVEL, SCHEDULE1_DEFAULTS, HOLIDAYS, WEEK_CN,
-    DEPT_ALIAS, mapDepartment,
+    DEPT_ALIAS, mapDepartment, CLOUD,
   };
 })();
