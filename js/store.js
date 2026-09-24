@@ -23,6 +23,7 @@ window.Store = (function () {
       groups: {},           // 编组：{ userId: [ {id, name, personIds:[]} ] }
       bundles: {},          // 组合/捆绑：{ userId: [ {id, name, personIds:[]（有序）} ] }
       coMemory: {},         // 相邻人员共现记忆：{ "personId|personId": count }
+      useCounts: {},        // 人员使用频次（被拖入排班的次数）：{ personId: count }
       settings: { editPassword: 'admin123' },  // 人员编辑二次确认密码
       submit: {},           // 提交状态：{ s1:{submitted,at}, s2:{deptId:{...}}, s3:{...}, s4:{...} }
       // 排班数据
@@ -271,6 +272,21 @@ window.Store = (function () {
     }
     save();
   }
+
+  /* ---------- 人员使用频次（备选人员排序） ---------- */
+  /** 记录一次人员被拖入排班 */
+  function recordUseCount(personId) {
+    if (!personId) return;
+    const d = load();
+    d.useCounts = d.useCounts || {};
+    d.useCounts[personId] = (d.useCounts[personId] || 0) + 1;
+    save();
+  }
+  /** 取某人员被使用次数 */
+  function useCountOf(personId) {
+    const d = load();
+    return (d.useCounts || {})[personId] || 0;
+  }
   /** 根据共现记忆，返回频繁组合的建议（top N 对） */
   function suggestBundles(userId, departmentName, topN) {
     const d = load();
@@ -409,6 +425,7 @@ window.Store = (function () {
     listGroups, addGroup, updateGroup, removeGroup, groupPersons,
     listBundles, addBundle, updateBundle, removeBundle, bundlePersons,
     recordCoMemory, suggestBundles,
+    recordUseCount, useCountOf,
     getSettings, updateSettings,
     getLeaderIds, setLeaderIds, leaderPersons,
     getSubmit, setSubmit,
