@@ -26,8 +26,8 @@ window.ExcelGen = (function () {
   function colLetter(i) { return X().utils.encode_col(i); }
 
   /**
-   * 班组夜间值班表（多 sheet，匹配模板格式）
-   * @param {array} deptList [{deptName, title, teams:[{name,phone,area}], cells:{date:{teamName:[...]}}, syncCols:[{label,cells}]}]
+   * 班组夜间值班表（多 sheet，匹配模板：三级表头 区域→班组→工段）
+   * @param {array} deptList [{deptName, title, teams:[{name,phone,area,zone}], cells:{date:{teamName:[...]}}, syncCols:[{label,zone,cells}]}]
    * @param {object} info {year, month}
    */
   function buildBanzuWorkbook(deptList, syncUnits, info) {
@@ -38,100 +38,91 @@ window.ExcelGen = (function () {
     deptList.forEach(dept => {
       const teams = dept.teams || [];
       const cells = dept.cells || {};
-      const syncCols = dept.syncCols || (syncUnits || []).filter(u => u.label);
-      const totalCols = 1 + teams.length + syncCols.length;
+      const syncCols = dept.syncCols || [];
+
+      // 列列表：班组列 + 全厂性同步列，每列 {zone, name, phone, area, cellData}
+      const cols = [];
+      teams.forEach(t => cols.push({ zone: t.zone || '', name: t.name, phone: t.phone || '', area: t.area || '', cellData: (d) => cells[d] ? cells[d][t.name] : null }));
+      syncCols.forEach(u => cols.push({ zone: u.zone || '', name: u.label, phone: '', area: '', cellData: (d) => u.cells ? u.cells[d] : null }));
+
+      const totalCols = 1 + cols.length;
 
       const ws = {};
-      ws['!ref'] = X().utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 4 + days, c: totalCols - 1 } });
-      ws['!cols'] = [{ wch: 12 }].concat(teams.map(() => ({ wch: 18 }))).concat(syncCols.map(() => ({ wch: 16 })));
+      ws['!ref'] = X().utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 5 + days - 1, c: totalCols - 1 } });
+      // 列宽：A 日期列窄，班组列较宽
+      ws['!cols'] = [{ wch: 10 }].concat(cols.map(() => ({ wch: 13 })));
+      // 行高
       ws['!rows'] = [
-        { hpt: 32 }, { hpt: 25 }, { hpt: 23 }, { hpt: 50 }, { hpt: 30 },
+        { hpt: 32 }, { hpt: 25 }, { hpt: 23 }, { hpt: 50 }, { hpt: 26 },
       ].concat(Array.from({ length: days }, () => ({ hpt: 40 })));
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
+
+      // 合并单元格
+      const merges = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } }, // 标题
+        { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } }, // 副标题
+        { s: { r: 2, c: 0 }, e: { r: 4, c: 0 } },             // A3:A5 专业
       ];
-      // 打印设置
-      ws['!autofilter'] = undefined;
+      // Row3 区域合并（相邻相同 zone）
+      let i = 0;
+      while (i < cols.length) {
+        let j = i;
+        while (j + 1 < cols.length && cols[j + 1].zone === cols[i].zone && cols[i].zone) j++;
+        if (cols[i].zone) merges.push({ s: { r: 2, c: 1 + i }, e: { r: 2, c: 1 + j } });
+        i = j + 1;
+      }
+      ws['!merges'] = merges;
 
       // Row1 标题
-      ws['A1'] = { t: 's', v: dept.title || `${dept.deptName}维保班组值班表（${month}月1日-${month}月${days}日）` };
+      ws['A1'] = { t: 's', v: dept.title || `${dept.deptName}维保班组值班表` };
       setStyle(ws, 'A1', { sz: 24, bold: true, h: 'left', v: 'center' });
       // Row2 火灾报警电话
       ws['A2'] = { t: 's', v: `火灾报警值班电话${CONFIG.COMPANY.fireAlarmPhone}` };
-      setStyle(ws, 'A2', { sz: 11, h: 'left' });
-      // Row3 表头
-      ws['A3'] = { t: 's', v: '班组' };
-      setStyle(ws, 'A3', { sz: 14, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
-      teams.forEach((t, i) => {
-        const ref = colLetter(i + 1) + '3';
-        ws[ref] = { t: 's', v: t.area || '' };
+      setStyle(ws, 'A2', { sz: 11, h: 'left', v: 'center' });
+      // Row3 区域（A3="专业"）
+      ws['A3'] = { t: 's', v: '专业' };
+      setStyle(ws, 'A3', { sz: 14, bold: true, fill: HEADER_FILL, border: B_MEDIUM, v: 'center' });
+      cols.forEach((col, ci) => {
+        const ref = colLetter(1 + ci) + '3';
+        ws[ref] = { t: 's', v: col.zone || '' };
         setStyle(ws, ref, { sz: 14, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
       });
-      syncCols.forEach((u, i) => {
-        const ref = colLetter(1 + teams.length + i) + '3';
-        ws[ref] = { t: 's', v: u.label };
-        setStyle(ws, ref, { sz: 14, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
-      });
-      // Row4 班组名+电话
-      ws['A4'] = { t: 's', v: '日期' };
+      // Row4 班组名 + 电话
+      ws['A4'] = { t: 's', v: '' };
       setStyle(ws, 'A4', { sz: 12, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
-      teams.forEach((t, i) => {
-        const ref = colLetter(i + 1) + '4';
-        ws[ref] = { t: 's', v: t.name + (t.phone ? '\n' + t.phone : '') };
+      cols.forEach((col, ci) => {
+        const ref = colLetter(1 + ci) + '4';
+        ws[ref] = { t: 's', v: col.name + (col.phone ? '\n' + col.phone : '') };
         setStyle(ws, ref, { sz: 12, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
       });
-      syncCols.forEach((u, i) => {
-        const ref = colLetter(1 + teams.length + i) + '4';
-        ws[ref] = { t: 's', v: u.label };
-        setStyle(ws, ref, { sz: 12, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
-      });
-      // Row5 区域
+      // Row5 工段
       ws['A5'] = { t: 's', v: '' };
-      setStyle(ws, 'A5', { sz: 10, border: B_MEDIUM });
-      teams.forEach((t, i) => {
-        const ref = colLetter(i + 1) + '5';
-        ws[ref] = { t: 's', v: t.area || '' };
-        setStyle(ws, ref, { sz: 10, border: B_MEDIUM });
-      });
-      syncCols.forEach((u, i) => {
-        const ref = colLetter(1 + teams.length + i) + '5';
-        ws[ref] = { t: 's', v: '' };
-        setStyle(ws, ref, { sz: 10, border: B_MEDIUM });
+      setStyle(ws, 'A5', { sz: 12, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
+      cols.forEach((col, ci) => {
+        const ref = colLetter(1 + ci) + '5';
+        ws[ref] = { t: 's', v: col.area || '' };
+        setStyle(ws, ref, { sz: 12, bold: true, fill: HEADER_FILL, border: B_MEDIUM });
       });
 
-      // 日期行
+      // 数据行（Row6 起）
       for (let d = 1; d <= days; d++) {
-        const r = 4 + d - 1;
-        const rn = r + 1;
+        const rn = 5 + d; // 第 d 天的行号（1-based，Row6=第1天）
         const isAD = Utils.isAllDay(year, month, d);
-        // 日期列（Excel 日期序列号 + 日期格式）
-        const dateSerial = Math.round((new Date(year, month - 1, d) - new Date(1899, 11, 30)) / 86400000);
         const dateRef = 'A' + rn;
-        ws[dateRef] = { t: 'n', v: dateSerial, z: 'm"月"d"日"' };
+        ws[dateRef] = { t: 's', v: `${month}月${d}日` };
         setStyle(ws, dateRef, { sz: 10, bold: true, fill: isAD ? YELLOW : undefined, border: B_THIN });
-        teams.forEach((t, i) => {
-          const ref = colLetter(i + 1) + rn;
-          const raw = (cells[d] && cells[d][t.name]) || null;
+        cols.forEach((col, ci) => {
+          const ref = colLetter(1 + ci) + rn;
+          const raw = col.cellData(d);
           const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-          const txt = list.map(p => p && p.name ? (Utils.phoneText(p) ? `${p.name} ${Utils.phoneText(p)}` : p.name) : '').filter(Boolean).join('\n');
-          ws[ref] = { t: 's', v: txt };
-          setStyle(ws, ref, { sz: 10, border: B_THIN });
-        });
-        syncCols.forEach((u, i) => {
-          const ref = colLetter(1 + teams.length + i) + rn;
-          const raw = (u.cells && u.cells[d]) || null;
-          const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-          const txt = list.map(p => p && p.name ? (Utils.phoneText(p) ? `${p.name} ${Utils.phoneText(p)}` : p.name) : '').filter(Boolean).join('\n');
+          const txt = list.map(p => p && p.name ? p.name : '').filter(Boolean).join('\n');
           ws[ref] = { t: 's', v: txt };
           setStyle(ws, ref, { sz: 10, border: B_THIN });
         });
       }
 
-      // 页面设置（横向 + 缩放）
-      if (!ws['!print']) {
-        ws['!print'] = {};
-      }
+      // 页面设置：横向 + 缩放（SheetJS 支持有限，尽力设置）
+      ws['!margins'] = { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 };
+
       X().utils.book_append_sheet(wb, ws, dept.deptName);
     });
 
