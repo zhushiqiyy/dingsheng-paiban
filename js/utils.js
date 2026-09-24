@@ -38,9 +38,18 @@ window.Utils = (function () {
     return d === 0 || d === 6;
   }
 
+  /** 取某年节假日数据：优先 Store 里刷新过的自定义数据，否则 CONFIG 内置 */
+  function _holidayData(year) {
+    if (window.Store && typeof Store.getHolidayData === 'function') {
+      const d = Store.getHolidayData(year);
+      if (d && d.holidays && d.holidays.length) return d;
+    }
+    return CONFIG.HOLIDAYS[year] || { holidays: [], makeupWorkdays: [] };
+  }
+
   /** 判断日期是否在法定节假日（放假）内 */
   function isHoliday(year, month, day) {
-    const h = CONFIG.HOLIDAYS[year];
+    const h = _holidayData(year);
     if (!h) return false;
     return h.holidays.some(r => {
       const s = r.start, e = r.end;
@@ -51,7 +60,7 @@ window.Utils = (function () {
 
   /** 判断日期是否为调休上班日（周末但上班） */
   function isMakeupWorkday(year, month, day) {
-    const h = CONFIG.HOLIDAYS[year];
+    const h = _holidayData(year);
     if (!h) return false;
     return h.makeupWorkdays.some(d => d[0] === month && d[1] === day);
   }
@@ -68,7 +77,7 @@ window.Utils = (function () {
 
   /** 获取某月所有法定节假日名称（用于显示） */
   function holidayNames(year, month, day) {
-    const h = CONFIG.HOLIDAYS[year];
+    const h = _holidayData(year);
     if (!h) return [];
     return h.holidays.filter(r => {
       const s = r.start, e = r.end;
