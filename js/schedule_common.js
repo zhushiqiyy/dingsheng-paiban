@@ -44,6 +44,9 @@ window.Schedule = (function () {
       let filtered = persons.filter(p => Utils.matchPerson(q, p));
       if (teamFilter !== 'all') filtered = filtered.filter(p => (p.team || '') === teamFilter);
 
+      // 按使用频次降序排序（被拖入次数多的排前面，方便选择；频次相同保持原顺序）
+      filtered = filtered.slice().sort((a, b) => (Store.useCountOf(b.id) || 0) - (Store.useCountOf(a.id) || 0));
+
       if (opts.groupByTeam && teamFilter === 'all') {
         // 按班组分组
         const groups = {};
@@ -481,6 +484,7 @@ window.Schedule = (function () {
       const name = nameInp.value.trim() || ('组合' + (Store.listBundles(cfg.userId).length + 1));
       Store.addBundle(cfg.userId, name, pending.map(p => p.id));
       pending.length = 0; nameInp.value = ''; renderPending();
+      renderList();
       if (cfg.onChanged) cfg.onChanged();
     });
 
