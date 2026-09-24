@@ -43,8 +43,8 @@ html, body {
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-danger { color: var(--danger); border-color: #f3c1c3; }
 .btn-danger:hover { background: #fdecec; border-color: var(--danger); }
-.btn-ghost { border-color: transparent; background: transparent; color: #fff; }
-.btn-ghost:hover { background: rgba(255,255,255,.15); }
+.btn-ghost { border-color: transparent; background: transparent; color: #4b5563; }
+.btn-ghost:hover { background: #f2f5fa; }
 .btn-sm { padding: 3px 8px; font-size: 12px; }
 .btn-block { width: 100%; justify-content: center; }
 
