@@ -23,6 +23,7 @@ window.Store = (function () {
       groups: {},           // 编组：{ userId: [ {id, name, personIds:[]} ] }
       bundles: {},          // 组合/捆绑：{ userId: [ {id, name, personIds:[]（有序）} ] }
       coMemory: {},         // 相邻人员共现记忆：{ "personId|personId": count }
+      cellCoMemory: {},     // 同一格子（同天同班组）多人组合频次：{ "personId|personId|...": count }
       useCounts: {},        // 人员使用频次（被拖入排班的次数）：{ personId: count }
       holidayData: {},      // 从万年历刷新来的节假日数据：{ year: {holidays:[{name,start,end}], makeupWorkdays:[[m,d]]} }
       settings: { editPassword: 'admin123' },  // 人员编辑二次确认密码
@@ -67,6 +68,16 @@ window.Store = (function () {
   }
 
   function save() {
+    if (_data) {
+      localStorage.setItem(KEY, JSON.stringify(_data));
+      // 已连接云则触发自动上传（防抖，fire-and-forget）
+      if (window.CloudSync && CloudSync.isEnabled()) CloudSync.notifyLocalChange();
+    }
+  }
+
+  /** 从云端载入整份数据（不走 save，避免触发回传） */
+  function loadFromCloud(obj) {
+    _data = obj;
     if (_data) localStorage.setItem(KEY, JSON.stringify(_data));
   }
 
@@ -274,6 +285,36 @@ window.Store = (function () {
     save();
   }
 
+  /* ---------- 同一格子多人组合频次（右侧智能组合推荐） ---------- */
+  /** 记录一个格子（同天同班组多人）的组合 */
+  function recordCellCoMemory(cellPersons) {
+    const ids = (cellPersons || []).filter(p => p && p.id).map(p => p.id);
+    if (ids.length < 2) return;
+    const d = load();
+    d.cellCoMemory = d.cellCoMemory || {};
+    const key = ids.slice().sort().join('|');
+    d.cellCoMemory[key] = (d.cellCoMemory[key] || 0) + 1;
+    save();
+  }
+  /** 返回同一格子多人组合的推荐（top N） */
+  function suggestCellBundles(departmentName, topN) {
+    const d = load();
+    const all = load().personnel;
+    const entries = Object.entries(d.cellCoMemory || {})
+      .map(([k, c]) => ({ ids: k.split('|'), c }))
+      .filter(e => e.ids.length >= 2)
+      .sort((a, b) => b.c - a.c)
+      .slice(0, topN || 9);
+    const result = [];
+    for (const e of entries) {
+      const persons = e.ids.map(id => all.find(p => p.id === id)).filter(Boolean);
+      if (persons.length < 2) continue;
+      if (departmentName && persons.some(p => p.department !== departmentName)) continue;
+      result.push({ name: persons.map(p => p.name).join('+'), personIds: e.ids, count: e.c });
+    }
+    return result;
+  }
+
   /* ---------- 人员使用频次（备选人员排序） ---------- */
   /** 记录一次人员被拖入排班 */
   function recordUseCount(personId) {
@@ -379,9 +420,9 @@ window.Store = (function () {
       if (p.department === deptName && p.team) custom.add(p.team);
     }
     const list = [];
-    for (const t of seed) list.push({ name: t.name, phone: t.phone, area: t.area || '' });
+    for (const t of seed) list.push({ name: t.name, phone: t.phone, area: t.area || '', zone: t.zone || '' });
     for (const c of custom) {
-      if (!list.some(t => t.name === c)) list.push({ name: c, phone: '', area: '' });
+      if (!list.some(t => t.name === c)) list.push({ name: c, phone: '', area: '', zone: '' });
     }
     return list;
   }
@@ -442,6 +483,7 @@ window.Store = (function () {
     listGroups, addGroup, updateGroup, removeGroup, groupPersons,
     listBundles, addBundle, updateBundle, removeBundle, bundlePersons,
     recordCoMemory, suggestBundles,
+    recordCellCoMemory, suggestCellBundles,
     recordUseCount, useCountOf,
     getHolidayData, setHolidayData,
     getSettings, updateSettings,
@@ -449,6 +491,6 @@ window.Store = (function () {
     getSubmit, setSubmit,
     getS1, setS1, getS2, setS2, getS3, setS3, getS4, setS4,
     getLastInput, setLastInput,
-    exportAll, importAll, clearAll,
+    exportAll, importAll, clearAll, loadFromCloud,
   };
 })();
