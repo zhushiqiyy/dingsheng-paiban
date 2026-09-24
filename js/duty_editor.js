@@ -155,6 +155,13 @@ window.DutyEditor = (function () {
             // 组合：从当前日期开始连续填充
             payload.persons.forEach((p, idx) => { if (day + idx <= days) assignPerson(day + idx, p); });
             recordCo();
+          } else if (Array.isArray(payload) && payload.length) {
+            // 拖动已填格（多人）复制到本格
+            const list = normAssign(data.assignments[day]);
+            payload.forEach(p => { if (p && p.name && list.length < maxPerCell) list.push(p); });
+            setDay(day, list);
+            payload.forEach(p => { if (p && p.name) Store.recordUseCount(p.id); });
+            recordCo();
           } else if (payload && payload.name) {
             assignPerson(day, payload);
             recordCo();
