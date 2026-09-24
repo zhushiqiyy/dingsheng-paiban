@@ -185,7 +185,7 @@ window.VS3 = (function () {
                 Object.keys(s3.colors[d]).forEach(t => {
                   if (s3.colors[d][t] === ci) {
                     const existing = normCell(s3.cells[d] && s3.cells[d][t]);
-                    persons.forEach(p => { if (existing.length < MAX_CELL && !existing.some(x => personKey(x) === personKey(p))) existing.push(p); });
+                    persons.forEach(p => { if (existing.length < MAX_CELL && !existing.some(x => personKey(x) === personKey(p))) { existing.push(p); Store.recordUseCount(p.id); } });
                     if (!s3.cells[d]) s3.cells[d] = {};
                     s3.cells[d][t] = existing.slice(0, MAX_CELL);
                     cnt++;
@@ -350,25 +350,19 @@ window.VS3 = (function () {
 
     let clipboard = null; // 数组
 
-    // 某人员是否已在本表出现（排除当前格）
-    function personUsedElsewhere(p, date, team) {
-      const key = personKey(p);
-      if (!key) return false;
-      for (const d in s3.cells) {
-        const row = s3.cells[d] || {};
-        for (const t in row) {
-          if (String(d) === String(date) && t === team) continue;
-          if (normCell(row[t]).some(x => personKey(x) === key)) return true;
-        }
-      }
-      return false;
-    }
-
     function attachCellHandlers(td, date, team) {
       const getList = () => normCell(s3.cells[date] && s3.cells[date][team]);
       const setList = (list) => {
         if (!s3.cells[date]) s3.cells[date] = {};
-        s3.cells[date][team] = list.slice(0, MAX_CELL);
+        // 同一格子内去重（按姓名+长号+短号），保留顺序，最多 MAX_CELL 人；跨列/跨行允许重复
+        const seen = new Set();
+        const uniq = list.filter(p => {
+          const k = personKey(p);
+          if (!k || seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        s3.cells[date][team] = uniq.slice(0, MAX_CELL);
         Store.setS3(unit.deptId, s3);
         renderCellContent(td, normCell(s3.cells[date][team]));
       };
@@ -376,8 +370,9 @@ window.VS3 = (function () {
         const list = getList();
         if (list.length >= MAX_CELL) { alert(`一个格子最多 ${MAX_CELL} 人`); return; }
         if (list.some(x => personKey(x) === personKey(p))) return; // 本格已有
-        if (personUsedElsewhere(p, date, team)) { alert(`「${p.name}」已在本表出现，同一人只能出现一次`); return; }
-        list.push(p); setList(list);
+        list.push(p);
+        Store.recordUseCount(p.id);
+        setList(list);
       };
 
       Schedule.makeDroppable(td, {
@@ -385,7 +380,7 @@ window.VS3 = (function () {
           if (payload && payload.bundle) {
             const list = getList();
             payload.persons.forEach(p => {
-              if (list.length < MAX_CELL && !list.some(x => personKey(x) === personKey(p)) && !personUsedElsewhere(p, date, team)) list.push(p);
+              if (list.length < MAX_CELL && !list.some(x => personKey(x) === personKey(p))) { list.push(p); Store.recordUseCount(p.id); }
             });
             setList(list);
           } else if (payload && payload.name) {
