@@ -126,10 +126,16 @@ window.Schedule = (function () {
     el.addEventListener('drop', (e) => {
       e.preventDefault();
       el.classList.remove('drop-target');
-      let p = _dragPayload;
-      if (!p) {
-        try { p = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (err) { p = null; }
-      }
+      let p = null;
+      // 优先解析 dataTransfer 文本（拖动已填格/组合时携带完整多人数据；避免 _dragPayload 残留单人导致只填1人）
+      try {
+        const txt = e.dataTransfer.getData('text/plain');
+        if (txt) {
+          const parsed = JSON.parse(txt);
+          if (parsed && (Array.isArray(parsed) || parsed.name || parsed.bundle)) p = parsed;
+        }
+      } catch (err) {}
+      if (!p) p = _dragPayload;
       if (p && opts.onDrop) opts.onDrop(p, el);
     });
     // 右键清除
